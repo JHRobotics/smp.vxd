@@ -268,8 +268,8 @@ void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 			{
 				PCRS_32 is = (PCRS_32)(ttable[i].data->init_state);
 				PCRS_32 ps = (PCRS_32)(ttable[i].data->proc_state);
-				terrorf(TERROR_COM2, "CPU#%d: init_state->Client_EIP=%X, proc_state->Client_EIP=%X\n",
-					i, is->Client_EIP, ps->Client_EIP);
+				terrorf(TERROR_COM2, "CPU#%d: proc_state->Client_EFlags=%X proc_state->Client_EIP=%X\n",
+					i, ps->Client_EFlags, ps->Client_EIP);
 			}
 		}
 	}

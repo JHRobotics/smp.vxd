@@ -110,6 +110,9 @@ typedef struct titem
 
 #define STACK_PAGES 8
 #define STACK_SIZE (STACK_PAGES*P_SIZE)
+#define STACK_OFF_KERNEL (P_SIZE*4 - 4)
+#define STACK_OFF_PLACEHOLDER (P_SIZE*6 - 4)
+#define STACK_OFF_TSS (P_SIZE*8 - 4)
 
 #define DATA_PAGES 2
 /* 1 - tdata, 2 - PD */
@@ -144,6 +147,6 @@ void __cdecl atomic_unlock(volatile uint32_t *lockptr, int v);
 void smp_elevate(DWORD proc, DWORD lockaddr);
 BOOL smp_switch_install();
 
-void copy_pd(uint32_t *dest_pd, int full);
+void copy_pd(uint32_t *dest_pd);
 
 #endif /* __SMP_H__INCLUDED__ */

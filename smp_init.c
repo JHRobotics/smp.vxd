@@ -148,7 +148,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		dbg_printf("starting AP: #%d data=0x%lX stack=0x%lX cr3=0x%lX\n",
 			i, ttable[i].data, ttable[i].stack, ttable[i].data->cpu_cr3);
 			
-		copy_pd(ttable[i].data->pd, 1);
+		copy_pd(ttable[i].data->pd);
 
 		vars->gdt_size    = sizeof(def_gdt)-1;
 		vars->gdt_address = (uint32_t)(ttable[i].data->gdt);
@@ -156,7 +156,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		vars->idt_address = kernel_flat + AP_KERNEL_ISR_OFF;
 		vars->sys_cr3     = ttable[i].data->cpu_cr3;
 		vars->kernel_addr = kernel_flat;
-		vars->stack_addr  = ttable[i].stack + STACK_SIZE - 4; // stack TOP
+		vars->stack_addr  = ttable[i].stack + STACK_OFF_KERNEL;
 		vars->bsp_id      = bspid;
 		vars->ttable      = (uint32_t)ttable;
 		
@@ -315,7 +315,7 @@ BOOL smp_init()
 
 						memset(ttable[apid].data->tss, 0, 128);
 
-						ttable[apid].data->tss[1] = ttable[apid].stack + P_SIZE; // esp0
+						ttable[apid].data->tss[1] = ttable[apid].stack + STACK_OFF_TSS; // esp0
 						ttable[apid].data->tss[2] = 0x10; // ss0
 						ttable[apid].data->tss[16] = (104 << 16); // IOPB 
 

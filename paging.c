@@ -2,7 +2,7 @@
 
 static uint32_t *sys_pd = NULL;
 
-void copy_pd(uint32_t *dest_pd, int full)
+void copy_pd(uint32_t *dest_pd)
 {
 	if(sys_pd == NULL)
 	{
@@ -32,4 +32,6 @@ void copy_pd(uint32_t *dest_pd, int full)
 		pop esi
 		pop edi
 	}
+	
+	dest_pd[0x2FF] = 0; // trap for kernel32 range (0xBFC0 0000 - BFFF FFFF)
 }

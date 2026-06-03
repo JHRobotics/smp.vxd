@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <windows.h>
 #include "smp9x.h"
 
@@ -73,10 +72,6 @@ void __cdecl smp9x_thread_elevate(volatile DWORD *lock_ptr)
 			params[1] = (DWORD)lock_ptr;
 			
 			DeviceIoControl(smp_vxd, DIOC_SMP_ELEVATE, params, sizeof(params), NULL, 0, NULL, NULL);
-		}
-		else
-		{
-			printf("Thread is not BSP, %d\n", is_bsp());
 		}
 	}
 }

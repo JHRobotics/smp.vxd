@@ -180,28 +180,24 @@ static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
 								ttable[cpu].data->thread_id = ts_thread_tid();
 								
 								memcpy(ttable[cpu].data->proc_state, crs, sizeof(CRS_32));
-								copy_pd(ttable[cpu].data->pd, 0);
-								
-								/*
+								copy_pd(ttable[cpu].data->pd);
+
+								/* we need change stack otherwise BSP idle and AP will overwrite own data */
+								crs->Client_ESP = ttable[cpu].stack + STACK_OFF_PLACEHOLDER;
 								crs->Client_ECX = ts->smp_bsp_idle_proc;
-								crs->Client_EAX = (DWORD)ts->smp_bsp_idle_lock;
-								crs->Client_EIP = (DWORD)idle_trampoline;
-								*/
-								
-								// TODO: check if stack is writeable
-								crs->Client_ESP -= 4;
-								*((DWORD*)(crs->Client_ESP)) = (DWORD)ts->smp_bsp_idle_lock;
-								crs->Client_ESP -= 4;
-								*((DWORD*)(crs->Client_ESP)) = 0xFFFFFFF0; /* return to invalid address */
-								crs->Client_EIP = ts->smp_bsp_idle_proc;
-							
+								crs->Client_EAX = (DWORD)(ts->smp_bsp_idle_lock);
+								crs->Client_EIP = kernel_flat + SMP_OFFSET_TRAMPOLINE;
+
 								ts->smp_status = 1;
 								ts->smp_apid = cpu;
 							
 								s = S_LOADED;
 								found = 1;
 								
-								dbg_printf("SWITCH: thread=%lX, CR3=%lX\n", ttable[cpu].data->thread_id, ttable[cpu].data->cpu_cr3);
+								dbg_printf("SWITCH: thread=%lX, EFlags=%lX, proc=%X, lock=%X\n", ttable[cpu].data->thread_id, crs->Client_EFlags,
+									ts->smp_bsp_idle_proc,
+									(DWORD)(ts->smp_bsp_idle_lock)
+								);
 							}
 						}
 						else
@@ -250,12 +246,25 @@ static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
 				
 				if(s == S_CARGO)
 				{
+					DWORD *stack;
 					memcpy(crs, ttable[ts->smp_apid].data->proc_state, sizeof(CRS_32));
+					
+					stack = (DWORD*)(crs->Client_ESP);
+					
+					stack--;
+					*stack = crs->Client_EFlags;
+					stack--;
+					*stack = crs->Client_CS;
+					stack--;
+					*stack = crs->Client_EIP;
+					crs->Client_ESP -= 3*4;
+					crs->Client_EIP = kernel_flat + SMP_OFFSET_INT;
+					
 					ts->smp_status = 0;
 					s = S_READY;
 					terrorf(TERROR_COM1, "int3 from %d to BSP\n", ts->smp_apid);
 				}
-					
+				
 				atomic_unlock(lck, s);
 			}
 		}
@@ -284,12 +293,13 @@ static void __declspec(naked) callback_int3_entry()
 		push ebx ; VM
 		call callback_int3
 		test eax, eax
-		popad
 		jz callback_int3_next
+			popad
 			popfd
 			retn ; handled!
 		
 		callback_int3_next:
+		popad
 		popfd
 		jmp [int3_next_hook]
 	}

@@ -447,7 +447,18 @@ _reattach:
 	ret
 	
 	;;; PAD
-	rb fn_block_size - $ + _reattach
+	rb (fn_block_size shr 1) - $ + _reattach
+	
+_trampoline:
+	push ecx
+	push eax
+	trampoline_loop:
+		mov ecx, [esp+4] ; -> __cdecl idle_func(uint32_t *lock)
+		call ecx
+		jmp trampoline_loop
+
+	;;; PAD
+	rb (fn_block_size shr 1) - $ + _trampoline
 
 org org_int
 

@@ -5,12 +5,14 @@
 #define DIOC_SMP_GET_ADDRESS 3
 #define DIOC_SMP_ELEVATE 4
 
-#define SMP_OFFSET_IS_BSP 0x200
-#define SMP_OFFSET_FLY    0x300
-#define SMP_OFFSET_LAND   0x400
-#define SMP_OFFSET_REATTACH 0x500
+#define SMP_OFFSET_IS_BSP     0x200
+#define SMP_OFFSET_FLY        0x300
+#define SMP_OFFSET_LAND       0x400
+#define SMP_OFFSET_REATTACH   0x500
+#define SMP_OFFSET_TRAMPOLINE 0x580
+#define SMP_OFFSET_INT        0x600
 
-#define SMP_FN_BLOCK_SIZE 0x100
+#define SMP_FN_BLOCK_SIZE     0x100
 
 void __cdecl smp9x_init();
 void __cdecl smp9x_close();
