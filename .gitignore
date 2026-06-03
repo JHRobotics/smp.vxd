@@ -1,0 +1,16 @@
+# some my garbage
+/test/
+
+*.drv
+*.vxd
+*.sym
+*.res
+*.bin
+*.obj
+*.lib
+*.map
+*.err
+*.exe
+*.bat
+*.bak
+*.backup

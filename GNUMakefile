@@ -1,0 +1,77 @@
+DEPS=GNUMakefile
+
+WCC_INCS=-I$(WATCOM)\h\win
+WCC_CFLAGS=-q -wx -s -zls -6s -fp6 -mf -DVXD32 -fpi87 -ei -oeatxhn
+WCC_AFLAGS=-q
+WCC_CC=wcc386
+WCC_AS=wasm
+FASM=fasm
+BIN2H=bin2h
+
+GCC_CC=gcc
+GCC_INC=-I.
+GCC_CFLAGS=-std=c99 -O1 -g 
+
+BIN=smp.vxd
+TOOLS=fixlink.exe
+SMP_VXD_OBJS=vxd_lib.wcc.obj smp.wcc.obj dbgprint32.wcc.obj smp_init.wcc.obj smp_proc.wcc.obj \
+  vxd_terror.wcc.obj taskswitch.wcc.obj paging.wcc.obj
+
+DEBUG=1
+ifdef DEBUG
+  WCC_CFLAGS += -DDBGPRINT
+endif
+
+all: $(BIN)
+
+smp_init.wcc.obj: apboot.h apkernel.h
+
+%.wcc.obj: %.c $(DEPS)
+	$(WCC_CC) -fo=$@ $(WCC_CFLAGS) $(WCC_INCS) $<
+
+#%.obj: %.asm $(DEPS)
+#	$(WCC_AS) $(AFLAGS) $<
+
+%.fasm.obj: %.asm $(DEPS)
+	$(FASM) $< $@
+
+%.gcc.o: %.c $(GCC_DEPS)
+	$(GCC_CC) $(GCC_CFLAGS) $(GCC_INC) -c $@ $<
+
+apboot.h: apboot.asm
+	$(FASM) apboot.asm apboot.bin
+	bin2h apboot.bin apboot.h -id=apboot
+
+apkernel.h: apkernel.asm
+	$(FASM) apkernel.asm apkernel.bin
+	bin2h apkernel.bin apkernel.h -id=apkernel
+
+fixlink.exe : fixlink\fixlink.c
+	wcl386 -q $< -fe=$@
+
+prime.exe: prime.c smp9x.c
+	gcc -std=c99 -O2 -Wall -DSMP9X $^ -o prime
+
+%.lnk: GNUMakefile
+	echo system win_vxd dynamic > $@
+	echo option map=$*.map >> $@
+	echo option nodefaultlibs >> $@
+	echo name $(BIN) >> $@
+	$(foreach obj,$(SMP_VXD_OBJS),echo file $(obj) >> $@ &&) true
+	echo segment '_TEXT'  PRELOAD NONDISCARDABLE IOPL >> $@
+	echo segment '_DATA'  PRELOAD NONDISCARDABLE IOPL >> $@
+	echo segment 'CONST'  PRELOAD NONDISCARDABLE IOPL >> $@
+	echo segment 'CONST2' PRELOAD NONDISCARDABLE IOPL >> $@
+	echo segment '_BSS'   PRELOAD NONDISCARDABLE IOPL >> $@
+	echo export VXD_DDB.1 >> $@
+
+$(BIN): $(TOOLS) $(SMP_VXD_OBJS) smp.lnk
+	wlink op quiet @smp.lnk
+	fixlink.exe -vxd32 $@
+
+clean:
+	-$(RM) smp.lnk
+	-$(RM) *.err
+	-$(RM) $(SMP_VXD_OBJS)
+	-$(RM) $(BIN)
+
