@@ -30,6 +30,7 @@ THE SOFTWARE.
 #define TERROR_COM1 1
 #define TERROR_COM2 2
 
+void terrorvf(int type, const char *fmt, va_list va);
 void terrorf(int type, const char *fmt, ...);
 void terror(int type, const char *str);
 void tinit(int type);

@@ -44,10 +44,14 @@ void __declspec(naked) timeout_entry();
 void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 {
 	BOOL rc;
+	dbg_init();
+	
 	VMMCall(_Allocate_Device_CB_Area);
  	ThisVM = vm;
+ 	
  	smp_first_mb = (uint8_t*)_MapPhysToLinear(0, 1048576, 0);
 	dbg_printf("Device_Init: %s\n", VXD_DDB.DDB_Name);
+	
 	ts_init();
 	rc = smp_init();
 	dbg_printf("SMP init status = %d\n", rc);
@@ -55,35 +59,21 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 	{
 		smp_switch_install();
 	}
-	
-	{
-		int i = 0;
-		BYTE *p = (BYTE*)smp_ap_main;
-		for(i = 0; i < 32; i++)
-		{
-			dbg_printf("%02X ", *p);
-			p++;
-		}
-		dbg_printf("\n");
-		
-	}
-	
-	tinit(TERROR_COM2);
-	terrorf(TERROR_COM2, "sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
+
+	tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
 		sizeof(tdata_t), sizeof(CRS_32)
 	);
-	
-	Set_Global_Time_Out(1000, NULL, timeout_entry);
-}
 
-DWORD test_mem = 0;
+#ifdef DEBUG
+	Set_Global_Time_Out(1000, NULL, timeout_entry);
+#endif
+}
 
 void __stdcall Device_Dynamic_Init(DWORD vm)
 {
 	VMMCall(_Allocate_Device_CB_Area);
  	ThisVM = vm;
 	dbg_printf("Device_Dynamic_Init: %s\n", VXD_DDB.DDB_Name);
-	//rc = smp_init();
 	dbg_printf("Please load this device staticaly\n");
 }
 
@@ -155,18 +145,6 @@ void __stdcall Device_Thread_Destroy(DWORD thread_handle)
 	ts_thread_destroy(thread_handle);
 	//dbg_printf("Destroyed %lX\n", thread_handle);
 }
-
-#if 0
-void __declspec(naked) Device_IO_Control_entry()
-{
-	_asm {
-		push esi /* struct DIOCParams */
-		push ebx /* VMHandle */
-		call Device_IO_Control
-		retn
-	}
-}
-#endif
 
 void __stdcall print_control_code(DWORD code)
 {
@@ -249,6 +227,8 @@ void __declspec(naked) VXD_control()
 	};
 }
 
+#ifdef DEBUG
+
 void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 {
 	int i;
@@ -256,10 +236,10 @@ void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 	{
 		if(ttable[i].data != NULL)
 		{
-			terrorf(TERROR_COM2, "CPU#%d = %d ", i, ttable[i].data->status);
+			tracef("CPU#%d = %d ", i, ttable[i].data->status);
 		}
 	};
-	terrorf(TERROR_COM2, "\n");
+	tracef("\n");
 	
 	{
 		for(i = 0; i < MAX_CORES; i++)
@@ -268,31 +248,12 @@ void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 			{
 				PCRS_32 is = (PCRS_32)(ttable[i].data->init_state);
 				PCRS_32 ps = (PCRS_32)(ttable[i].data->proc_state);
-				terrorf(TERROR_COM2, "CPU#%d: proc_state->Client_EFlags=%X proc_state->Client_EIP=%X\n",
+				tracef("CPU#%d: proc_state->Client_EFlags=%X proc_state->Client_EIP=%X\n",
 					i, ps->Client_EFlags, ps->Client_EIP);
 			}
 		}
 	}
-	
-#if 0
-	for(i = 0; i < MAX_CORES; i++)
-	{
-		if(ttable[i].data != NULL)
-		{
-			terrorf(TERROR_COM2, "CPU %d GDT:\n", i);
-			terrorf(TERROR_COM2, "%08X %08X, %08X %08X, %08X %08X\n",
-				ttable[i].data->gdt[0], ttable[i].data->gdt[1],
-				ttable[i].data->gdt[2], ttable[i].data->gdt[3],
-				ttable[i].data->gdt[4], ttable[i].data->gdt[5]
-			);
-			terrorf(TERROR_COM2, "%08X %08X, %08X %08X, %08X %08X\n",
-				ttable[i].data->gdt[6], ttable[i].data->gdt[7],
-				ttable[i].data->gdt[8], ttable[i].data->gdt[9],
-				ttable[i].data->gdt[10], ttable[i].data->gdt[11]
-			);
-		}
-	}
-#endif
+
 	Set_Global_Time_Out(1000, NULL, timeout_entry);
 }
 
@@ -309,3 +270,4 @@ void __declspec(naked) timeout_entry()
 	};
 }
 
+#endif

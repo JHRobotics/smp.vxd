@@ -129,19 +129,6 @@ void smp_switch_uninstall()
 	Unhook_PM_Fault(0x3, ((DWORD)callback_int3_entry) + CALLBACK_HEADER_SIZE);
 }
 
-#if 0
-static void __declspec(naked) idle_trampoline()
-{
-	_asm
-	{
-		push eax
-		idle_loop:
-		call [ecx]
-		jmp idle_loop
-	}
-}
-#endif
-
 static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
 {
 	if(crs->Client_EIP >= (kernel_flat + SMP_OFFSET_FLY) &&
@@ -219,13 +206,13 @@ static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
 					
 				if(found)
 				{
-					terrorf(TERROR_COM1, "int3 to AP: %d\n", cpu);
+					dbg_printf("int3 to AP: %d\n", cpu);
 
 					return 1;
 				}
 			}
 		}
-		terrorf(TERROR_COM1, "int3 but no AP\n");
+		dbg_printf("int3 but no AP\n");
 		return 1;
 	}
 	else if(crs->Client_EIP >= (kernel_flat + SMP_OFFSET_REATTACH) &&
@@ -238,7 +225,7 @@ static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
 			{
 				volatile uint32_t *lck = &(ttable[ts->smp_apid].data->status);
 				uint32_t s;
-				//BOOL found = TRUE;;
+
 				do
 				{
 					atomic_lock(lck, &s);
@@ -257,12 +244,13 @@ static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
 					*stack = crs->Client_CS;
 					stack--;
 					*stack = crs->Client_EIP;
+					
 					crs->Client_ESP -= 3*4;
 					crs->Client_EIP = kernel_flat + SMP_OFFSET_INT;
 					
 					ts->smp_status = 0;
 					s = S_READY;
-					terrorf(TERROR_COM1, "int3 from %d to BSP\n", ts->smp_apid);
+					dbg_printf("int3 from %d to BSP\n", ts->smp_apid);
 				}
 				
 				atomic_unlock(lck, s);
@@ -304,4 +292,3 @@ static void __declspec(naked) callback_int3_entry()
 		jmp [int3_next_hook]
 	}
 }
-

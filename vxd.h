@@ -9,11 +9,11 @@
 #define VXD_DEVICE_ID 0x2961
 #define VXD_DEVICE_NAME "SMP"
 
-#define VXD_MAJOR_VER 4
-#define VXD_MINOR_VER 0
+#define VXD_MAJOR_VER           4
+#define VXD_MINOR_VER           0
 
-#define VXD_PM16_VERSION                      0
-#define VXD_PM16_VMM_VERSION                  1
+#define VXD_PM16_VERSION        0
+#define VXD_PM16_VMM_VERSION    1
 
 #include <windows.h>
 #include <stdarg.h>

@@ -224,18 +224,17 @@ static volatile char terror_in()
  * x, X
  * s
  **/
-void terrorf(int type, const char *fmt, ...)
+void terrorvf(int type, const char *fmt, va_list va)
 {
 	char fmtbuffer[TERROR_MAX];
 	
 	const char *ptr;
 	char *out = fmtbuffer;
-	va_list va;
+	
 	int in_command = 0;
 	char cmd_pad = ' ';
 	int length = 0;
-	
-	va_start(va, fmt);
+
 	for(ptr = fmt;*ptr != '\0'; ptr++)
 	{
 		if(in_command == 0)
@@ -315,8 +314,16 @@ void terrorf(int type, const char *fmt, ...)
 	}
 	*out = '\0';
 	
-	va_end(va);
+
 	terror(type, fmtbuffer);
+}
+
+void terrorf(int type, const char *fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	terrorvf(type, fmt, va);
+	va_end(va);
 }
 
 void terror(int type, const char *str)

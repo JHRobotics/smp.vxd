@@ -1,3 +1,5 @@
+-include config.mk
+
 DEPS=GNUMakefile
 
 WCC_INCS=-I$(WATCOM)\h\win
@@ -10,26 +12,32 @@ BIN2H=bin2h
 
 GCC_CC=gcc
 GCC_INC=-I.
-GCC_CFLAGS=-std=c99 -O2 -Wall -DSMP9X
+GCC_CFLAGS=-std=c99 -Wall -DSMP9X
 GCC_LDFLAGS=
 GCC_LDFLAGS_WIN=-mwindows $(GCC_LDFLAGS)
 
 BIN=smp.vxd
 TOOLS=fixlink.exe
-SMP_VXD_OBJS=vxd_lib.wcc.obj smp.wcc.obj dbgprint32.wcc.obj smp_init.wcc.obj smp_proc.wcc.obj \
+SMP_VXD_OBJS=smp.wcc.obj vxd_lib.wcc.obj vxd_debug.wcc.obj smp_init.wcc.obj smp_proc.wcc.obj \
   vxd_terror.wcc.obj taskswitch.wcc.obj paging.wcc.obj
 
 SMP_LIB_OBJS=smp9x.gcc.o
 SMP_TESTS=tests/prime.exe tests/smpload.exe tests/systemcall.exe
 SMP_TESTS_OBJS=tests/smpload.gcc.o tests/prime.gcc.o tests/systemcall.gcc.o
 
-DEBUG=1
 ifdef DEBUG
-  WCC_CFLAGS += -DDBGPRINT
+  WCC_CFLAGS += -DDEBUG
+endif
+
+ifdef APP_DEBUG
+  GCC_CFLAGS += -O1 -g
+else
+  GCC_CFLAGS += -O2
 endif
 
 all: $(BIN)
 tests: all $(SMP_TESTS)
+.PHONY: all tests clean
 
 smp_init.wcc.obj: apboot.h apkernel.h
 
@@ -65,7 +73,6 @@ tests/prime.exe: $(SMP_LIB_OBJS) tests/prime.gcc.o
 tests/systemcall.exe: $(SMP_LIB_OBJS) tests/systemcall.gcc.o
 	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
 
-
 %.lnk: GNUMakefile
 	echo system win_vxd dynamic > $@
 	echo option map=$*.map >> $@
@@ -91,4 +98,3 @@ clean:
 	-$(RM) $(SMP_LIB_OBJS)
 	-$(RM) $(SMP_TESTS)
 	-$(RM) $(SMP_TESTS_OBJS)
-

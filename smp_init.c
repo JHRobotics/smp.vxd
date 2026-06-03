@@ -61,10 +61,12 @@ static mpfp_t *smp_scan_mpfp(uint32_t from, uint32_t to)
 			{
 				return mpft;
 			}
+#ifdef DEBUG
 			else
 			{
 				dbg_printf("MPFP found but checksum (%X)\n", ptr-smp_first_mb);
 			}
+#endif
 		}
 	}
 	
@@ -221,13 +223,10 @@ ULONG _PageCode(unsigned int pages, int zero, uint32_t *pphy)
 	if(a != 0)
 	{
 		_PageModifyPermissions(_PAGE(a), pages, PC_USER | PC_WRITEABLE, PC_USER | PC_WRITEABLE);
-		//_PageModifyPermissions(_PAGE(a), pages, PC_WRITEABLE, PC_WRITEABLE);
-		
 		if(pphy != NULL)
 		{
 			*pphy = phy;
 		}
-		
 	}
 	
 	return a;
