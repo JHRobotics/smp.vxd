@@ -41,28 +41,31 @@ tdata_proc_state equ 288
 tdata_proc_tss   equ 416
 tdata_fpu_state  equ 544
 
+; AP state
 S_BUSY    equ 0
 S_READY   equ 1
 S_SLEEP   equ 2
 S_LOADED  equ 3
 S_RUNNING equ 4
 S_CARGO   equ 5
+S_DISCARD equ 6
 
+; segments
 sys_cs     equ 0x8
 sys_ds     equ 0x10
 user_cs    equ (0x18 or 3)
 user_ds    equ (0x20 or 3)
 
+; isr types
 int_gate   equ 0x8E00
 trap_gate  equ 0x8F00
 sw_gate    equ 0xEF00
 
+; eflags manipulation
 eflags_set equ 0x00003200
 ; ^ IOPL IF
-
 eflags_clr equ 0x001F4100
 ; VIP VIF AC VM RF NT IF
-
 eflags_mask equ (eflags_set or eflags_clr)
 
 ; point reg to ap_data, eat flags 
@@ -86,6 +89,7 @@ macro GetAPID
 	shr    ebx, 24
 }
 
+; item in IDT
 macro IDTEntry isr, type
 {
 	dd ((isr and 0x0000FFFF) or (sys_cs shl 16))
@@ -93,13 +97,19 @@ macro IDTEntry isr, type
 }
 
 use32
+
+; Startup
+; equred params from apboot:
+;   ecx: sys_start
+;   esp: sys_stack
+;   esi: bsp_id
+;   edi: ttable
 org org_boot_addr
-; params
-; ecx: sys_start
-; esp: sys_stack
-; esi: bsp_id
-; edi: ttable
 _kernel_boot:
+	jmp skip_header
+	rb 14
+	db "JH APC/S 2026.0 "
+	skip_header:
 	mov ebp, ecx
 	add ebp, ap_data-_kernel_boot    ; epb -> ap_data
 	mov [ebp+(bsp_id-ap_data)], esi  ; save bsp_id
@@ -142,35 +152,29 @@ _kernel_boot:
 	mov ax, gs
 	mov [esi+Client_GS], ax
 	
-	pop eax
-	push ebx
-	push edx
-	push eax
+	; exchange order on stack
+	pop  eax ; -> APID
+	push ebx ; <- &status
+	push edx ; <- &idle_task
+	push eax ; <- APID
 	
-	mov eax, esp
-	;sub eax, 4
-	
-	mov [esi+Client_ESP], eax    ; save ESP
-	
+	mov [esi+Client_ESP], esp    ; save ESP
 	sti
 
-	mov dword [ebx], S_READY
+	; unlock AP lock
+	mov eax, S_READY
+	lock xchg [ebx], eax
 	
-;;	ll8: jmp ll8
 	goentry:
-		;lock xchg eax, [ebx]
-		;jnz check_state
-		;wait
-		;jmp goentry
-		;check_state:
+		call dword [edx] ; int __cdecl idle_task(uint32_t apid)
 		
-		call dword [edx]
 		test eax, eax
 		jz skip_st
 			call _switchtask
 		skip_st:
+		; restore regs from stack
 		mov edx, [esp+4]
-		mov ebx, [esp+8]
+		;mov ebx, [esp+8]
 		jmp goentry
 
 
@@ -243,12 +247,11 @@ _switchtask:
 	mov fs, ax
 	
 	; switch to context
-	popad
-		
+	popad	
 	iret
 	
-	add esp, 5*4
-	ret
+;	add esp, 5*4
+;	ret
 
 ; Save current state to proc_state and then
 ; restore restore CPU to init_state state
@@ -301,7 +304,6 @@ switch_back:
 	; use original sp
 	lea  esi, [ebx+tdata_init_state]
 	mov  esp, [esi+Client_ESP]
-	
 	; iret stack
 	mov  eax, [esi+Client_EFlags]
 	push eax
@@ -352,6 +354,7 @@ switch_back:
 
 ;
 ; int __cdecl is_bsp()
+;
 ; @return: 0 if current CPU is BSP
 ;
 org org_is_bsp
@@ -449,24 +452,35 @@ _reattach:
 	;;; PAD
 	rb (fn_block_size shr 1) - $ + _reattach
 	
+;
+; Call idle function (and restart it when returs)
+; params:
+;   eax - pointer to lock
+;   ecx - pointer to idle function
+;
 _trampoline:
 	push ecx
 	push eax
 	trampoline_loop:
-		mov ecx, [esp+4] ; -> __cdecl idle_func(uint32_t *lock)
+		mov ecx, [esp+4] ; -> void __cdecl idle_func(uint32_t *lock)
 		call ecx
 		jmp trampoline_loop
 
 	;;; PAD
 	rb (fn_block_size shr 1) - $ + _trampoline
 
+;
+; ISRs (IDT entries points here)
+;
 org org_int
-
+; no action
+; can be also used as trampoline to process so leave it as first entry
 _dummy_isr:
 	iret
 
 _error_isr_code:
 	add esp, 4
+
 _error_isr:
 ;	mov esi,[esp]
 ;	mov edi,[esp+4]
@@ -511,6 +525,9 @@ ap_data:
 	;;; PAD
 	rb fn_block_size - $ + ap_data
 
+;
+; IDT (1536 bytes)
+;
 org org_idt
 _idt:
 ; 0x00 	0 	#DE 	Fault 	No 	Divide Error 	DIV and IDIV instructions.

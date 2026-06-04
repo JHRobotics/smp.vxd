@@ -1,3 +1,13 @@
+;
+; Needs be placed at 0x00008000 on physical address,
+; when kernel is loaded is posible to discard this code.
+;
+; After load, kernel is full position independent.
+;
+
+;
+; STEP I: from real mode to PM32 (PG=0)
+;
 use16
 align 1
 
@@ -7,7 +17,9 @@ ap_boot16:
 	cld
 	xor    ax, ax
 	mov    ds, ax
+	; temporary GDT when is PG=0
 	lgdt   [GDT_value_TMP]
+	; load vars to regs
 	mov    eax, [sys_cr3]
 	mov    ecx, [sys_start]
 	mov    esp, [sys_stack]
@@ -15,13 +27,17 @@ ap_boot16:
 	mov    edi, [ttable]
 	mov    cr3, eax
 	mov    eax, cr0
-;	or     eax, 0x80000001
+	; enable PE (but not PG yet)
 	or     eax, 0x00000001
 	mov    cr0, eax
+	; jump to PM
 	jmp far 0x8:0x8100
-
+	; pad
   rb 0x100 - $ + ap_boot16
 
+;
+; STEP II: enable pagging
+;
 use32
 org 0x8100
 ap_boot32:
@@ -41,8 +57,12 @@ ap_boot32:
 	mov    eax, cr0
 	and    eax, 0xFFFEFFFF ; -WP
 	mov    cr0, eax
-	
-	; load new GDT
+
+;
+; STEP III: point tables to paged linear addresses
+;
+  ; (all )
+	; load new GDT (on virtual addresses)
 	lgdt   [GDT_value]
 	lidt   [IDT_value]
 	; reload segments
@@ -54,26 +74,35 @@ ap_boot32:
 	mov gs, ax
 	mov ax, 0x28
 	ltr ax
+
+;
+; STEP IV: pass control to the kernel
+;
 	; we need another far jmp to load new GDT
 	db 0xEA ; jmp far
 far_jmp_address:
 	dd 0x0
 	dw 0x0008
-  rb 0x100 - $ + ap_boot32
+  rb 0x80 - $ + ap_boot32
 
-org 0x8200
+;
+; variables, sets by BSP before execution
+;
+org 0x8180
+ap_vars:
 GDT_value:
-	dw 47 ; size - 1 (6 * 2 * 4) 
-	dd 0xDDDDDDDD ; GDT address
+	dw 47                         ; GDT size-1  (6*64 bit)
+	dd 0xDDDDDDDD                 ; GDT address (linear PG=1)
 IDT_value:
-	dw 1535 ; (256*6) - 1
-	dd 0x11111111 ; IDT address
-sys_cr3:   dd 0xC3C3C3C3
-sys_start: dd 0xAAAAAAAA
-sys_stack: dd 0xDDDDDDDD
-bsp_id:    dd 0x1D1D1D1D
-ttable:    dd 0xEEEEEEEE
+	dw 1535                       ; IDT size-1 (256*6 bytes)
+	dd 0x11111111                 ; IDT address (linear PG=1)
+sys_cr3:   dd 0xC3C3C3C3        ; PD for kernel boot (physical address)
+sys_start: dd 0xAAAAAAAA        ; kernel position (linear address, PG=1)
+sys_stack: dd 0xDDDDDDDD        ; stack top for kernel
+bsp_id:    dd 0x1D1D1D1D        ; ID of BSP (usually: 0) 
+ttable:    dd 0xEEEEEEEE        ; pointer to ttable (AP individual data: ttable[APID])
 
+; temporary GDT (PG=0)
 GDT_table_TMP:
 	dd 0, 0
 	dd 0x0000FFFF, 0x00CF9A00    ; flat code
@@ -83,3 +112,7 @@ GDT_value_TMP:
   dw GDT_value_TMP - GDT_table_TMP - 1
 	dd GDT_table_TMP
 	dd 0, 0
+
+	; pad
+  rb 0x7C - $ + ap_vars
+  dd 0xFFFFFFFF

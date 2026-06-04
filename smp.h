@@ -69,7 +69,7 @@ typedef struct mp_processor {
 #define MP_SIZE_PROCESSOR 20
 #define MP_SIZE_APIC 8
 
-#define AP_BOOT_VAR_OFF 0x0200
+#define AP_BOOT_VAR_OFF 0x0180
 #define AP_KERNEL_ISR_OFF 0x800
 #define AP_KERNEL_BASE 0xC0000000
 

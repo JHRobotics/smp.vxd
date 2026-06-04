@@ -2,6 +2,10 @@
 
 DEPS=GNUMakefile
 
+ifdef HAVE_CONFIG_MK
+DEPS += config.mk
+endif
+
 WCC_INCS=-I$(WATCOM)\h\win
 WCC_CFLAGS=-q -wx -s -zls -6s -fp6 -mf -DVXD32 -fpi87 -ei -oeatxhn
 WCC_AFLAGS=-q
