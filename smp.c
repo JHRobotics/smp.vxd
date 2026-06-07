@@ -107,7 +107,7 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 			rc = 0;
 			break;
 		case DIOC_SMP_ELEVATE:
-			smp_elevate(inBuf[0], inBuf[1]);
+			smp_elevate(inBuf[0], inBuf[1], inBuf[2]);
 			rc = 0;
 			break;
 		// all others

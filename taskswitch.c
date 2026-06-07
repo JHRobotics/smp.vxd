@@ -29,6 +29,7 @@ ts_thread_t *ts_thread_create(DWORD tid)
 		ts->smp_bsp_idle_lock = NULL;
 		ts->dirty = 1;
 		ts->data = (DWORD*)(ts+1);
+		ts->mode = SMP_MODE_SYSTEM;
 		
 		hash = TS_HASH(tid);
 		
@@ -90,9 +91,29 @@ ts_thread_t *ts_thread_get(DWORD tid)
 	return NULL;
 }
 
+int switch_to_ap(PCRS_32 crs, DWORD thread_id);
+
 void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 {
+	ts_thread_t *ts;
 	act_tid = cur_tid;
+	
+	ts = ts_thread_get(old_tid);
+	if(ts)
+	{
+		if(ts->mode == SMP_MODE_AUTORUN && ts->smp_status == 0)
+		{
+			TCB_t *cbs = (TCB_t*)old_tid;
+			//dbg_printf("TS: tid=%X, eip=%X esp=%X\n", old_tid, cbs->TCB_ClientPtr->Client_EIP, cbs->TCB_ClientPtr->Client_ESP);
+			//dbg_printf("    TCB_Flags=%X TCB_PMLockOrigEIP=%X\n", cbs->TCB_Flags, cbs->TCB_PMLockOrigEIP);
+			
+			if(cbs->TCB_ClientPtr->Client_EIP >= 0x00100000 && cbs->TCB_ClientPtr->Client_EIP < 0x80000000)
+			{
+				switch_to_ap(cbs->TCB_ClientPtr, old_tid);
+			}
+		}
+	}
+	
 }
 
 /* MSDN: ThreadSwitchCallback */
@@ -129,134 +150,140 @@ void smp_switch_uninstall()
 	Unhook_PM_Fault(0x3, ((DWORD)callback_int3_entry) + CALLBACK_HEADER_SIZE);
 }
 
-static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
+int switch_to_ap(PCRS_32 crs, DWORD thread_id)
 {
-	if(crs->Client_EIP >= (kernel_flat + SMP_OFFSET_FLY) &&
-		crs->Client_EIP < (kernel_flat + SMP_OFFSET_FLY + SMP_FN_BLOCK_SIZE))
+	BOOL found = FALSE;
+	int cpu;
+	for(cpu = 0; cpu < MAX_CORES; cpu++)
 	{
-		BOOL found = FALSE;
-		int cpu;
-		for(cpu = 0; cpu < MAX_CORES; cpu++)
+		if(ttable[cpu].data != NULL)
 		{
-			if(ttable[cpu].data != NULL)
+			uint32_t s;
+			volatile uint32_t *lck = &(ttable[cpu].data->status);
+				
+			do
 			{
-				uint32_t s;
-				volatile uint32_t *lck = &(ttable[cpu].data->status);
+				atomic_lock(lck, &s);
+			} while(s == S_BUSY);
 				
-				do
+			switch(s)
+			{
+				case S_READY:
+				case S_SLEEP:
 				{
-					atomic_lock(lck, &s);
-				} while(s == S_BUSY);
-				
-				switch(s)
-				{
-					case S_READY:
-					case S_SLEEP:
+					ts_thread_t *ts = ts_thread_get(thread_id);
+					if(ts)
 					{
-						ts_thread_t *ts = ts_thread_get(ts_thread_tid());
-						if(ts)
+						if(ts->smp_status == 0 && ts->smp_bsp_idle_proc != 0)
 						{
-							if(ts->smp_status == 0 && ts->smp_bsp_idle_proc != 0)
+							if(ts->smp_bsp_idle_lock != NULL)
 							{
-								if(ts->smp_bsp_idle_lock != NULL)
-								{
-									*(ts->smp_bsp_idle_lock) = 1;
-								}
-								
+								*(ts->smp_bsp_idle_lock) = 1;
+							
 								ttable[cpu].data->proc_cr4 = GetCR4();
-								ttable[cpu].data->thread_id = ts_thread_tid();
-								
-								memcpy(ttable[cpu].data->proc_state, crs, sizeof(CRS_32));
-								copy_pd(ttable[cpu].data->pd);
+								ttable[cpu].data->thread_id = thread_id;
+							
+								memcpy(ttable[cpu].data->proc_state, crs, CRS_32_EFECTIVE_SIZE);
 
+								copy_pd(ttable[cpu].data->pd, 0);
 								/* we need change stack otherwise BSP idle and AP will overwrite own data */
 								crs->Client_ESP = ttable[cpu].stack + STACK_OFF_PLACEHOLDER;
 								crs->Client_ECX = ts->smp_bsp_idle_proc;
 								crs->Client_EAX = (DWORD)(ts->smp_bsp_idle_lock);
 								crs->Client_EIP = kernel_flat + SMP_OFFSET_TRAMPOLINE;
-
 								ts->smp_status = 1;
 								ts->smp_apid = cpu;
 							
 								s = S_LOADED;
 								found = 1;
-								
-								dbg_printf("SWITCH: thread=%lX, EFlags=%lX, proc=%X, lock=%X\n", ttable[cpu].data->thread_id, crs->Client_EFlags,
-									ts->smp_bsp_idle_proc,
-									(DWORD)(ts->smp_bsp_idle_lock)
-								);
-							}
-						}
-						else
-						{
-							dbg_printf("TID = %lX, lookup fail\n", ts_thread_tid());
-						}
-						
-						break;
-					}
-				} // switch
+							
+								//dbg_printf("SWITCH TO AP#%d: thread=%lX, proc=%X\n", cpu, ttable[cpu].data->thread_id, ts->smp_bsp_idle_proc);
+							} // have lock
+						} // status
+					} // rs
+					break;
+				} // case
+			} // switch
 				
-				if(found)
-				{
-					/* must be before unlock to prevent deadlock */
-					smp_wakeup(cpu);
-				}
+			if(found)
+			{
+				/* must be before unlock to prevent deadlock */
+				smp_wakeup(cpu);
+			}
 
-				atomic_unlock(lck, s);
+			atomic_unlock(lck, s);
 					
-				if(found)
-				{
-					dbg_printf("int3 to AP: %d\n", cpu);
-
-					return 1;
-				}
+			if(found)
+			{
+				//dbg_printf("int3 to AP: %d\n", cpu);
+				return 1;
 			}
 		}
-		dbg_printf("int3 but no AP\n");
+	}
+	//dbg_printf("int3 but no AP\n");
+	return 0;
+}
+
+int switch_to_bsp(PCRS_32 crs, DWORD thread_id)
+{
+	int rc = 0;
+	ts_thread_t *ts = ts_thread_get(thread_id);
+	if(ts)
+	{
+		if(ts->smp_status != 0)
+		{
+			volatile uint32_t *lck = &(ttable[ts->smp_apid].data->status);
+			uint32_t s;
+
+			do
+			{
+				atomic_lock(lck, &s);
+			} while(s == S_BUSY);
+				
+			if(s == S_CARGO)
+			{
+				DWORD *stack;
+				DWORD tmp_eip;
+				memcpy(crs, ttable[ts->smp_apid].data->proc_state, CRS_32_EFECTIVE_SIZE);
+				tmp_eip = crs->Client_EIP;
+				
+				stack = (DWORD*)(crs->Client_ESP);
+				
+				stack--;
+				*stack = crs->Client_EFlags;
+				stack--;
+				*stack = crs->Client_CS;
+				stack--;
+				*stack = crs->Client_EIP;
+					
+				crs->Client_ESP -= 3*4;
+				crs->Client_EIP = kernel_flat + SMP_OFFSET_INT;
+					
+				ts->smp_status = 0;
+				s = S_READY;
+				//dbg_printf("SWITCH BSP: AP#%d return=%X\n", ts->smp_apid, tmp_eip);
+				
+				rc = 1;
+			}
+			
+			atomic_unlock(lck, s);
+		}
+	}
+	return rc;
+}
+
+static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
+{
+	if(crs->Client_EIP >= (kernel_flat + SMP_OFFSET_FLY) &&
+		crs->Client_EIP < (kernel_flat + SMP_OFFSET_FLY + SMP_FN_BLOCK_SIZE))
+	{
+		switch_to_ap(crs, ts_thread_tid());
 		return 1;
 	}
 	else if(crs->Client_EIP >= (kernel_flat + SMP_OFFSET_REATTACH) &&
 		crs->Client_EIP < (kernel_flat + SMP_OFFSET_REATTACH + SMP_FN_BLOCK_SIZE))
 	{
-		ts_thread_t *ts = ts_thread_get(ts_thread_tid());
-		if(ts)
-		{
-			if(ts->smp_status != 0)
-			{
-				volatile uint32_t *lck = &(ttable[ts->smp_apid].data->status);
-				uint32_t s;
-
-				do
-				{
-					atomic_lock(lck, &s);
-				} while(s == S_BUSY);
-				
-				if(s == S_CARGO)
-				{
-					DWORD *stack;
-					memcpy(crs, ttable[ts->smp_apid].data->proc_state, sizeof(CRS_32));
-					
-					stack = (DWORD*)(crs->Client_ESP);
-					
-					stack--;
-					*stack = crs->Client_EFlags;
-					stack--;
-					*stack = crs->Client_CS;
-					stack--;
-					*stack = crs->Client_EIP;
-					
-					crs->Client_ESP -= 3*4;
-					crs->Client_EIP = kernel_flat + SMP_OFFSET_INT;
-					
-					ts->smp_status = 0;
-					s = S_READY;
-					dbg_printf("int3 from %d to BSP\n", ts->smp_apid);
-				}
-				
-				atomic_unlock(lck, s);
-			}
-		}
-		
+		switch_to_bsp(crs, ts_thread_tid());
 		return 1;
 	}
 	

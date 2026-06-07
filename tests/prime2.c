@@ -84,6 +84,12 @@ uint64_t count_primes(uint64_t from, uint64_t to)
 	for(n = from; n <= to; n++)
 	{
 		cnt += is_prime(n);
+		
+		if((n % 10000) == 0)
+		{
+			printf("current %llu\n", n);
+		}
+		
 	}
 	
 	return cnt;
@@ -101,26 +107,12 @@ typedef struct mp_result
 
 DWORD WINAPI count_primes_mp_main(LPVOID lpParameter)
 {
-#ifdef SMP9X
-		volatile DWORD lock;
-		/* ^ lock is per thread, simplest option is put it on thread stack */
-		smp9x_thread_elevate(&lock, SMP_MODE_MANUAL);
-#endif
-	
 	mp_result_t *r = (mp_result_t *)lpParameter;
 	
 	printf("thread start: %d\n", r->tnum);
 	
-#ifdef SMP9X
-	smp9x_thread_fly();
-#endif
-
 	/* computing part */
 	r->result = count_primes(r->from, r->to);
-
-#ifdef SMP9X
-	smp9x_thread_land();
-#endif
 
 	printf("thread end: %d\n", r->tnum);
 	return 0;
@@ -166,7 +158,7 @@ uint64_t count_primes_mp(uint64_t from, uint64_t to, int cpus)
 				for(i = 0; i < cpus; i++)
 				{
 					DWORD id;
-					threads[i] = CreateThread(NULL, 4096, count_primes_mp_main, results+i, 0, &id);
+					threads[i] = smp9x_CreateThread(NULL, 4096, count_primes_mp_main, results+i, 0, &id);
 				}
 				
 				WaitForMultipleObjects(cpus, threads, TRUE, INFINITE);
@@ -193,7 +185,7 @@ uint64_t count_primes_mp(uint64_t from, uint64_t to, int cpus)
 }
 
 //#define BENCH 20000000
-#define BENCH  2000000
+#define BENCH  5000000
 
 int main(int argc, char **argv)
 {
@@ -202,13 +194,10 @@ int main(int argc, char **argv)
 	clock_t t;
 	int threads = 0;
 	
-	GetSystemInfo(&si);
-	
-#ifdef SMP9X
 	smp9x_init();
-	si.dwNumberOfProcessors = smp9x_cpus();
-#endif
 	
+	smp9x_GetSystemInfo(&si);
+
 	t = clock();
 
 	if(argc >= 2)
@@ -234,9 +223,7 @@ int main(int argc, char **argv)
 	
 	printf("primes = %llu, time = %f\n", cnt, ((float)t)/CLOCKS_PER_SEC);
 
-#ifdef SMP9X
 	smp9x_close();
-#endif
 
 	return EXIT_SUCCESS;
 }

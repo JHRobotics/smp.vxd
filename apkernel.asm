@@ -35,6 +35,8 @@ tdata_thread_id  equ 4
 tdata_entry      equ 8
 tdata_cpu_cr3    equ 12
 tdata_proc_cr4   equ 16
+tdata_pd         equ 20
+tdata_index      equ 24
 tdata_gdt        equ 32
 tdata_init_state equ 160
 tdata_proc_state equ 288
@@ -377,8 +379,27 @@ _is_bsp:
 	ret
 	
 	;;; PAD
-	rb fn_block_size - $ + _is_bsp
+	rb (fn_block_size shr 1) - $ + _is_bsp
+	
+_cpuindex:
+	push ebx
+	GetAPID
+	GetData ecx
+	cmp    ebx, [esi+(bsp_id-ap_data)]
+	jnz    not_bsp
+		mov  eax, eax
+		jmp cpuindex_done
 
+	shl ebx,  3 ; ebx * 8
+	mov ecx, [ecx+(ttable-ap_data)]
+	add ecx,  ebx      ; table[apid]
+	mov ebx, [ecx+4]   ; table[apid]->data
+	mov eax, [ebx+tdata_index]
+	
+	cpuindex_done:
+	pop ebx
+	ret
+	rb (fn_block_size shr 1) - $ + _cpuindex
 ;
 ; void __cdecl fly();
 ;
@@ -386,6 +407,7 @@ _is_bsp:
 ;
 org org_fly
 _fly:
+	pushfd
 	push eax
 	push ecx
 	push edx
@@ -395,12 +417,14 @@ _fly:
 		pop edx
 		pop ecx
 		pop eax
+		popfd
 		int3
 		ret
 	skip_fly:
 	pop edx
 	pop ecx
 	pop eax
+	popfd
 	ret
 
 	;;; PAD
@@ -413,6 +437,7 @@ _fly:
 ;
 org org_land
 _land:
+	pushfd
 	push eax
 	push ecx
 	push edx
@@ -422,12 +447,14 @@ _land:
 		pop edx
 		pop ecx
 		pop eax
+		popfd
 		int3
 		ret
 	skip_land:
 	pop edx
 	pop ecx
 	pop eax
+	popfd
 	ret
 
 	;;; PAD

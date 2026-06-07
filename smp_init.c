@@ -150,7 +150,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		dbg_printf("starting AP: #%d data=0x%lX stack=0x%lX cr3=0x%lX\n",
 			i, ttable[i].data, ttable[i].stack, ttable[i].data->cpu_cr3);
 			
-		copy_pd(ttable[i].data->pd);
+		copy_pd(ttable[i].data->pd, 1);
 
 		vars->gdt_size    = sizeof(def_gdt)-1;
 		vars->gdt_address = (uint32_t)(ttable[i].data->gdt);
@@ -320,6 +320,8 @@ BOOL smp_init()
 
 						ttable[apid].data->cpu_cr3 = phy + P_SIZE;
 						ttable[apid].data->pd = (uint32_t*)(((uint8_t*)mem) + P_SIZE);
+
+						ttable[apid].data->index = ap_count+1;
 
 						ttable[apid].data->entry = (uint32_t)smp_ap_main;
 						ttable[apid].data->status = S_BUSY;

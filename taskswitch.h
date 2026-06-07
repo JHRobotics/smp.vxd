@@ -11,7 +11,8 @@ typedef struct ts_thread
 	DWORD *smp_bsp_idle_lock; /* 20, pointer to BSP lock */
 	DWORD dirty;              /* 24, 1 when there is no xsave */
 	DWORD *data;              /* 28, pointer do data area */
-	DWORD pad[8];             /* 32, pad to XSAVE area */
+	DWORD mode;               /* 32, switching type */
+	DWORD pad[7];             /* 36, pad to XSAVE area */
 	/* XSAVE */
 } ts_thread_t;
 

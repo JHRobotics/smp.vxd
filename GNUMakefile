@@ -26,8 +26,11 @@ SMP_VXD_OBJS=smp.wcc.obj vxd_lib.wcc.obj vxd_debug.wcc.obj smp_init.wcc.obj smp_
   vxd_terror.wcc.obj taskswitch.wcc.obj paging.wcc.obj
 
 SMP_LIB_OBJS=smp9x.gcc.o
-SMP_TESTS=tests/prime.exe tests/smpload.exe tests/systemcall.exe
-SMP_TESTS_OBJS=tests/smpload.gcc.o tests/prime.gcc.o tests/systemcall.gcc.o
+SMP_TESTS=tests/prime.exe tests/prime2.exe tests/smpload.exe tests/systemcall.exe \
+  tests/doscall.exe
+
+SMP_TESTS_OBJS=tests/smpload.gcc.o tests/prime.gcc.o tests/prime2.gcc.o \
+  tests/systemcall.gcc.o tests/doscall.gcc.o
 
 ifdef DEBUG
   WCC_CFLAGS += -DDEBUG
@@ -74,7 +77,13 @@ tests/smpload.exe: tests/smpload.gcc.o
 tests/prime.exe: $(SMP_LIB_OBJS) tests/prime.gcc.o
 	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
 
+tests/prime2.exe: $(SMP_LIB_OBJS) tests/prime2.gcc.o
+	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
+
 tests/systemcall.exe: $(SMP_LIB_OBJS) tests/systemcall.gcc.o
+	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS_WIN)
+
+tests/doscall.exe: $(SMP_LIB_OBJS) tests/doscall.gcc.o
 	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
 
 %.lnk: GNUMakefile

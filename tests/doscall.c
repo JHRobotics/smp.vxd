@@ -12,7 +12,7 @@ DWORD WINAPI thread_main(LPVOID lpParameter)
 	smp9x_thread_elevate(&lock, SMP_MODE_MANUAL);
 	smp9x_thread_fly();
 
-	MessageBoxA(NULL, "Hello from thread!", "Threat!", MB_OK);
+	printf("Hello from thread!\n");
 
 	smp9x_thread_land();
 
@@ -26,7 +26,7 @@ int main(int argc, char **argv)
 	
 	HANDLE th = CreateThread(NULL, 0, thread_main, NULL, 0, &id);
 	
-	MessageBoxA(NULL, "Hello from main!", "Main!", MB_OK);
+	printf("Hello from main!\n");
 	WaitForSingleObject(th, INFINITE);
 	
 	return EXIT_SUCCESS;

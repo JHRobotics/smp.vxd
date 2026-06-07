@@ -13,8 +13,17 @@
 *.map
 *.err
 *.exe
+*.dll
 *.bat
 *.bak
 *.backup
 
 config.mk
+
+# ignore generate files
+/libsmp/hooks.asm
+/libsmp/libsmp.def
+/apboot.bin
+/apboot.h
+/apkernel.bin
+apkernel.h

@@ -36,7 +36,7 @@ void __cdecl atomic_unlock(volatile uint32_t *lockptr, int v)
 }
 #endif
 
-void smp_elevate(DWORD proc, DWORD lockaddr)
+void smp_elevate(DWORD proc, DWORD lockaddr, DWORD mode)
 {
 	
 	ts_thread_t *ts = ts_thread_get(ts_thread_tid());
@@ -44,6 +44,7 @@ void smp_elevate(DWORD proc, DWORD lockaddr)
 	{
 		ts->smp_bsp_idle_proc = proc;
 		ts->smp_bsp_idle_lock = (DWORD*)lockaddr;
+		ts->mode = mode;
 		dbg_printf("Thread: %lX <- proc=%lX, lock=%lX cr3=%lX\n",
 			ts_thread_tid(), proc, lockaddr, GetCR3()
 		);

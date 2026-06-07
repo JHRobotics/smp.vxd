@@ -1248,6 +1248,9 @@ typedef struct tagCRS_32
    WORD   wReserved_13 ;          // (padding)
 
 } CRS_32, *PCRS_32;
+/* MSDN: Client_Reg_Struc */
+
+#define CRS_32_EFECTIVE_SIZE 0x48
 
 typedef struct VMCB
 {
@@ -1260,6 +1263,65 @@ typedef struct VMCB
 /* also as CB_S */
 
 #define VMCB_ID 0x62634D56	/* VMcb */
+
+typedef struct tcb_s
+{
+	DWORD TCB_Flags;            // thread status flags; see below
+	DWORD TCB_Reserved1;        // reserved for use by VMM
+	DWORD TCB_Reserved2;        // reserved for use by VMM
+	DWORD TCB_Signature;        // SCHED_OBJ_THREAD_ID
+	PCRS_32 TCB_ClientPtr;      // address of client registers
+	DWORD TCB_VMHandle;         // VM to which this thread belongs
+	WORD  TCB_ThreadId;         // thread ID 
+	WORD  TCB_PMLockOrigSS;     // client SS at Begin_Use_Locked_PM_Stack
+	DWORD TCB_PMLockOrigESP;    // client ESP at Begin_Use_Locked_PM_Stack
+	DWORD TCB_PMLockOrigEIP;    // client EIP at Begin_Use_Locked_PM_Stack
+	DWORD TCB_PMLockStackCount; // number of outstanding 
+  /* Begin_Use_Locked_PM_Stack calls */
+	WORD  TCB_PMLockOrigCS;     // client CS at Begin_Use_Locked_PM_Stack
+	WORD  TCB_PMPSPSelector;    // used by Vwin32
+	DWORD TCB_ThreadType;       // used by Vwin32
+	BYTE  TCB_pad1;             // padding
+	BYTE  TCB_pad2;             // padding
+	WORD  TCB_extErrLocus;      // used by Vwin32
+	BYTE  TCB_extErrAction;     // used by Vwin32
+	BYTE  TCB_extErrClass;      // used by Vwin32
+	DWORD TCB_extErrPtr;        // used by Vwin32
+} TCB_t;
+/* MSDN: tcb_s */
+
+#define SCHED_OBJ_ID_THREAD         0x42434854    // THCB in ASCII
+
+/*
+ *  Thread status indicates globally interesting thread states.
+ *  Flags are for information only and must not be modified.
+ */
+
+#define THFLAG_SUSPENDED_BIT        0x03   // Thread not scheduled
+#define THFLAG_SUSPENDED                   (1L << THFLAG_SUSPENDED_BIT)
+#define THFLAG_NOT_EXECUTEABLE_BIT  0x04   // Thread partially destroyed
+#define THFLAG_NOT_EXECUTEABLE             (1L << THFLAG_NOT_EXECUTEABLE_BIT)
+#define THFLAG_THREAD_CREATION_BIT  0x08   // Thread in status nascendi
+#define THFLAG_THREAD_CREATION             (1L << THFLAG_THREAD_CREATION_BIT)
+#define THFLAG_THREAD_BLOCKED_BIT   0x0A   // Blocked on semaphore
+#define THFLAG_THREAD_BLOCKED              (1L << THFLAG_THREAD_BLOCKED_BIT)
+#define THFLAG_RING0_THREAD_BIT     0x1C   // thread runs only at ring 0
+#define THFLAG_RING0_THREAD	           (1L << THFLAG_RING0_THREAD_BIT)
+#define THFLAG_CHARSET_BITS     0x10   // Default character set
+#define THFLAG_CHARSET_MASK        (3L << THFLAG_CHARSET_BITS)
+#define THFLAG_ANSI            (0L << THFLAG_CHARSET_BITS)
+#define THFLAG_OEM             (1L << THFLAG_CHARSET_BITS)
+#define THFLAG_UNICODE             (2L << THFLAG_CHARSET_BITS)
+#define THFLAG_RESERVED            (3L << THFLAG_CHARSET_BITS)
+#define THFLAG_EXTENDED_HANDLES_BIT 0x12   // Thread uses extended file handles
+#define THFLAG_EXTENDED_HANDLES            (1L << THFLAG_EXTENDED_HANDLES_BIT)
+/* the win32 loader opens win32 exes with this bit set to notify IFS
+ * so a defragger won't move these files
+ * the bit is turned off once the open completes.  
+ * file open flags are overloaded which is why this is here
+ */
+#define THFLAG_OPEN_AS_IMMOVABLE_FILE_BIT 0x13   // File thus opened not moved
+#define THFLAG_OPEN_AS_IMMOVABLE_FILE            (1L << THFLAG_OPEN_AS_IMMOVABLE_FILE_BIT)
 
 #pragma pack(pop)
 

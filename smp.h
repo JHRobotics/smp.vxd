@@ -94,7 +94,8 @@ typedef struct tdata
 	uint32_t cpu_cr3;          // 12
 	uint32_t proc_cr4;         // 16
 	uint32_t *pd;              // 20
-	uint32_t pad[2];           // 24
+	uint32_t index;            // 24
+	uint32_t pad;              // 28
 	uint32_t gdt[32];          // 32
 	uint8_t  init_state[128];  // 160  -> tagCRS_32
 	uint8_t  proc_state[128];  // 288 -> tagCRS_32
@@ -144,9 +145,9 @@ extern int cpu_count;
 uint32_t __cdecl atomic_lock(volatile uint32_t *lockptr, uint32_t *presult);
 void __cdecl atomic_unlock(volatile uint32_t *lockptr, int v);
 
-void smp_elevate(DWORD proc, DWORD lockaddr);
+void smp_elevate(DWORD proc, DWORD lockaddr, DWORD mode);
 BOOL smp_switch_install();
 
-void copy_pd(uint32_t *dest_pd);
+void copy_pd(uint32_t *dest_pd, int full);
 
 #endif /* __SMP_H__INCLUDED__ */
