@@ -13,6 +13,7 @@ WCC_CC=wcc386
 WCC_AS=wasm
 FASM=fasm
 BIN2H=bin2h
+CAT=cat
 
 GCC_CC=gcc
 GCC_INC=-I.
@@ -21,16 +22,22 @@ GCC_LDFLAGS=
 GCC_LDFLAGS_WIN=-mwindows $(GCC_LDFLAGS)
 
 BIN=smp.vxd
-TOOLS=fixlink.exe
+TOOLS=fixlink.exe generator.exe
+
 SMP_VXD_OBJS=smp.wcc.obj vxd_lib.wcc.obj vxd_debug.wcc.obj smp_init.wcc.obj smp_proc.wcc.obj \
   vxd_terror.wcc.obj taskswitch.wcc.obj paging.wcc.obj
 
-SMP_LIB_OBJS=smp9x.gcc.o
-SMP_TESTS=tests/prime.exe tests/prime2.exe tests/smpload.exe tests/systemcall.exe \
+SMP9X_OBJS=smp9x.gcc.o
+
+LIBSMP_OBJS=$(SMP9X_OBJS) libsmp_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o
+
+SMP_TESTS=tests/prime1.exe tests/prime2.exe tests/prime3.exe tests/smpload.exe tests/systemcall.exe \
   tests/doscall.exe
 
-SMP_TESTS_OBJS=tests/smpload.gcc.o tests/prime.gcc.o tests/prime2.gcc.o \
+SMP_TESTS_OBJS=tests/smpload.gcc.o tests/prime1.gcc.o tests/prime2.gcc.o tests/prime3.gcc.o \
   tests/systemcall.gcc.o tests/doscall.gcc.o
+
+GENERATED=libsmp.def libsmp.txt libsmp_hook.asm apboot.bin apboot.h apkernel.bin apkernel.h
 
 ifdef DEBUG
   WCC_CFLAGS += -DDEBUG
@@ -42,8 +49,8 @@ else
   GCC_CFLAGS += -O2
 endif
 
-all: $(BIN)
-tests: all $(SMP_TESTS)
+all: $(BIN) libsmp.dll tests
+tests: $(SMP_TESTS)
 .PHONY: all tests clean
 
 smp_init.wcc.obj: apboot.h apkernel.h
@@ -68,22 +75,41 @@ apkernel.h: apkernel.asm
 	$(FASM) apkernel.asm apkernel.bin
 	bin2h apkernel.bin apkernel.h -id=apkernel
 
-fixlink.exe : fixlink\fixlink.c
+fixlink.exe: fixlink\fixlink.c
 	wcl386 -q $< -fe=$@
+	
+generator.exe: libsmp\generator.c
+	gcc -std=c99 -Wall libsmp\generator.c -o $@
+
+libsmp.txt: libsmp\kernel32.txt libsmp\msvcrt.txt
+	$(CAT) libsmp\kernel32.txt > $@
+	$(CAT) libsmp\msvcrt.txt >> $@
+
+libsmp_hook.o: generator.exe libsmp.txt
+	generator libsmp.txt libsmp_hook.asm libsmp.def
+	$(CAT) libsmp/smp9x.def >> libsmp.def
+	$(FASM) libsmp_hook.asm $@
+
+libsmp.dll: $(LIBSMP_OBJS)
+	$(GCC_CC) $(CFLAGS) $(LIBSMP_OBJS) -shared -o $@ -Wl,--subsystem,windows -Wl,--kill-at -Wl,--enable-stdcall-fixup -lkernel32 -luser32 -lmsvcrt libsmp.def
 
 tests/smpload.exe: tests/smpload.gcc.o
 	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS_WIN)
 
-tests/prime.exe: $(SMP_LIB_OBJS) tests/prime.gcc.o
+tests/prime1.exe: tests/prime1.gcc.o fixlink.exe
+	$(GCC_CC) $(GCC_CFLAGS) tests/prime1.gcc.o -o $@ $(GCC_LDFLAGS)
+	fixlink -relink $@ libsmp.dll kernel32.dll msvcrt.dll
+
+tests/prime2.exe: $(SMP9X_OBJS) tests/prime2.gcc.o
+	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
+	
+tests/prime3.exe: $(SMP9X_OBJS) tests/prime3.gcc.o
 	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
 
-tests/prime2.exe: $(SMP_LIB_OBJS) tests/prime2.gcc.o
-	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
-
-tests/systemcall.exe: $(SMP_LIB_OBJS) tests/systemcall.gcc.o
+tests/systemcall.exe: $(SMP9X_OBJS) tests/systemcall.gcc.o
 	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS_WIN)
 
-tests/doscall.exe: $(SMP_LIB_OBJS) tests/doscall.gcc.o
+tests/doscall.exe: $(SMP9X_OBJS) tests/doscall.gcc.o
 	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
 
 %.lnk: GNUMakefile
@@ -108,6 +134,10 @@ clean:
 	-$(RM) *.err
 	-$(RM) $(SMP_VXD_OBJS)
 	-$(RM) $(BIN)
-	-$(RM) $(SMP_LIB_OBJS)
+	-$(RM) $(SMP9X_OBJS)
 	-$(RM) $(SMP_TESTS)
 	-$(RM) $(SMP_TESTS_OBJS)
+	-$(RM) $(LIBSMP_OBJS)
+	-$(RM) libsmp.dll
+	-$(RM) $(GENERATED)
+	-$(RM) $(TOOLS)

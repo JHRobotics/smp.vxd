@@ -39,6 +39,22 @@ rem device=smp.vxd
 ```
 
 
+## Compilation
+
+You need:
+1) GNU make
+2) fasm
+3) Watcom (1.9 or better)
+4) mingw (careful for build with wired SSE instructions)
+
+
+```
+make
+```
+
+This should make 
+
+
 ## Programmers guide
 
 ### Basics

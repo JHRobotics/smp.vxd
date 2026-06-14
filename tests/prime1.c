@@ -1,2 +1,1 @@
-#define SMP9X_LIB
 #include "prime.c"
