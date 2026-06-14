@@ -8,29 +8,43 @@ typedef DWORD size_t;
 
 /***
  * looks like VMM hasn't any function for sync wait (delay, sleep, whatever)
- * 1 000 000 = below 1 ms on modern cpus = 0.8 Intel, 0.2 AMD
+ * 1 = one cycle
  *
  **/
 void delay_loop(DWORD repeats)
 {
 	_asm
 	{
-		mov ecx, [repeats]
+		push esi
+		push edi
+		rdtsc
+		mov esi, eax
+		mov edi, edx
+		mov eax, [repeats]
+		add esi, eax
+		adc edi, 0
+	
 		loop_repeat:
-			jmp loop_loop
-			loop_loop:
-				loop loop_repeat
+			rdtsc
+			cmp edx,edi
+			jb loop_repeat
+			cmp eax,esi
+			jb loop_repeat
+
+			pop edi
+			pop esi
 	};
 }
 
+/* TODO: calibate the timer! - this expect ~3 GHz CPU */
 void mdelay(DWORD ms)
 {
-	delay_loop(ms*5000000);
+	delay_loop(ms*3000000);
 }
 
 void udelay(DWORD us)
 {
-	delay_loop(us*5000);
+	delay_loop(us*3000);
 }
 
 static uint8_t mp_checksum(uint8_t *ptr, unsigned int len)
@@ -94,20 +108,46 @@ static mpfp_t *mpfp = NULL;
 int cpu_count = 0;
 static volatile uint32_t *lapic32 = NULL;
 
-#define PAGE_BACKUP_SIZE 4096
+#define PAGE_BACKUP_SIZE 512
 static uint8_t page_backup[PAGE_BACKUP_SIZE];
 
 BOOL smp_wakeup(int apid)
 {
+	DWORD msr_lo = 0;
+	DWORD msr_hi = 0;
+
 	if(lapic32 != NULL)
 	{
-		//dbg_printf("smp_wakeup(%d)", apid);
+		/* enable APIC */
+		_asm{
+			cli
+			mov ecx, IA32_APIC_BASE
+			rdmsr
+			mov [msr_lo], eax
+			mov [msr_hi], edx
+			or eax, APIC_GLOBAL_ENABLE
+			wrmsr
+		};
+		
+		/* wait for APIC ready */
+		do{
+			_asm pause;
+		} while((lapic32[0x300/4] & (1 << 12)) != 0);
 		
 		lapic32[0x310/4] = (lapic32[0x310/4] & 0x00ffffff) | (apid << 24); // select AP   
 		lapic32[0x300/4] = (lapic32[0x300/4] & 0xfff00000) | 0x005400; // NMI
 		do{
 			_asm pause;
 		} while((lapic32[0x300/4] & (1 << 12)) != 0); // wait for delivery
+
+		/* I don't know why, but system will froze when keep APIC enabled */
+		_asm{
+			mov ecx, IA32_APIC_BASE
+			mov eax, [msr_lo]
+			mov edx, [msr_hi]
+			wrmsr
+			sti
+		};
 		return TRUE;
 	}
 	return FALSE;
@@ -118,11 +158,16 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 	int i, j;
 	apboot_vars_t *vars = (apboot_vars_t*)(smp_first_mb+AP_BOOT_ADDR+AP_BOOT_VAR_OFF);
 	uint8_t bspid = 0;
+	DWORD msr_lo = 0;
+	DWORD msr_hi = 0;
 
 	lapic32 = (volatile uint32_t*)_MapPhysToLinear(lapic, 4096, 0);
-	dbg_printf("lapic32: %lX\n", lapic32);
+	alertf("lapic32: %X => %X\n", lapic, lapic32);
 	
-	// get the BSP's Local APIC ID
+	/*
+		get the BSP's Local APIC ID
+		and enable APIC in MSR
+	*/
 	_asm{
 		mov eax, 1
 		cpuid
@@ -130,13 +175,35 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		mov [bspid], bl
 
 		cli
+		mov ecx, IA32_APIC_BASE
+		rdmsr
+		mov [msr_lo], eax
+		mov [msr_hi], edx
+		or eax, APIC_GLOBAL_ENABLE
+		wrmsr
 	};
 
+	/* backup memory before write here bootloader */
 	memcpy(page_backup, smp_first_mb+AP_BOOT_ADDR, PAGE_BACKUP_SIZE);
-	// copy the AP trampoline code to a fixed address in low conventional memory (to address 0x0800:0x0000)
+	/* copy the AP trampoline code to a fixed address in low conventional memory
+	 (to address 0x0800:0x0000)
+	 */
 	memcpy(smp_first_mb+AP_BOOT_ADDR, apboot, apboot_len);
 
-	dbg_printf("lapic = 0x%lX\n", lapic);
+	alertf("IA32_APIC_BASE = 0x%lX\n", msr_lo);
+	
+	lapic32[0xF0/4] |= 1 << 8;
+	udelay(10);
+	alertf("APIC enabled, wait for ready\n");
+	
+
+	while((lapic32[0x300/4] & (1 << 12)) != 0)
+	{
+		udelay(100);
+		alertf("%X ", lapic32[0x300/4]);
+	}
+	
+	dbg_printf("APIC ready\n");
 	
 	// for each Local APIC ID we do...
 	for(i = 0; i < MAX_CORES; i++)
@@ -147,7 +214,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		// do not start BSP, that's already running this code
 		if(i == bspid) continue;
 		
-		dbg_printf("starting AP: #%d data=0x%lX stack=0x%lX cr3=0x%lX\n",
+		alertf("starting AP: #%d data=0x%lX stack=0x%lX cr3=0x%lX\n",
 			i, ttable[i].data, ttable[i].stack, ttable[i].data->cpu_cr3);
 			
 		copy_pd(ttable[i].data->pd, 1);
@@ -169,6 +236,8 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		// send INIT IPI
 		lapic32[0x310/4] = (lapic32[0x310/4] & 0x00ffffff) | (i << 24); // select AP   
 		lapic32[0x300/4] = (lapic32[0x300/4] & 0xfff00000) | 0x00C500; // trigger INIT IPI
+		//lapic32[0x310/4] = i << 24;
+		//lapic32[0x300/4] = 0x00C500;
 		do{
 			_asm pause;
 		} while((lapic32[0x300/4] & (1 << 12)) != 0); // wait for delivery
@@ -176,6 +245,8 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		dbg_printf("call APIC 2!\n");
 		lapic32[0x310/4] = (lapic32[0x310/4] & 0x00ffffff) | (i << 24); // select AP
 		lapic32[0x300/4] = (lapic32[0x300/4] & 0xfff00000) | 0x008500; // deassert
+		//lapic32[0x310/4] = (i << 24);
+		//lapic32[0x300/4] = 0x008500;
 		do {
 			_asm pause;
 		} while((lapic32[0x300/4] & (1 << 12)) != 0); // wait for delivery
@@ -194,7 +265,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 			} while((lapic32[0x300/4] & (1 << 12)) != 0); // wait for delivery
 		}
 		
-		dbg_printf("wait for boot, apid=0x%X, data=0x%lX stack=0x%lX\n", i, ttable[i].data, ttable[i].stack);
+		alertf("wait for boot, apid=0x%X, data=0x%lX stack=0x%lX\n", i, ttable[i].data, ttable[i].stack);
 		
 		// wait for CPU boot
 		while(ttable[i].data->status == S_BUSY)
@@ -202,9 +273,21 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 			_asm pause;
 		}
 	}
-		
+	
+	/* restore memory whatever was there.... */
 	memcpy(smp_first_mb+AP_BOOT_ADDR, page_backup, PAGE_BACKUP_SIZE);
-	_asm sti;
+	
+	/* other driver may manipulate with APIC, so when we done, return APIC to previous state */
+
+	_asm{
+		mov ecx, IA32_APIC_BASE
+		mov eax, [msr_lo]
+		mov edx, [msr_hi]
+		wrmsr
+		sti
+	};
+
+	//_asm sti;
 	
 	return TRUE;
 }
@@ -247,11 +330,11 @@ BOOL smp_init()
 		DWORD off;
 		mpct_t *ct = (mpct_t *)(smp_first_mb + mpfp->configuration_table);
 		
-		dbg_printf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
+		alertf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
 		
 		if(memcmp(ct->signature, MPCT_MAGIC, 4) != 0)
 		{
-			dbg_printf("Invalid PCMP signature!\n");
+			alertf("Invalid PCMP signature!\n");
 			return NULL;
 		}
 				
@@ -259,7 +342,7 @@ BOOL smp_init()
 		kernel = (uint8_t*)_PageCode(1, 0, NULL);
 		if(kernel == 0)
 		{
-			dbg_printf("cannot allocate kernel\n");
+			alertf("cannot allocate kernel\n");
 			return FALSE;
 		}
 		dbg_printf("kernel alloc in %lX\n", kernel);
@@ -276,7 +359,7 @@ BOOL smp_init()
 			isr++;
 		}
 		
-		dbg_printf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
+		alertf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
 		
 		dbg_printf("going to list CPU: %d entries\n", ct->entry_count);
 		off = sizeof(mpct_t);
@@ -294,7 +377,7 @@ BOOL smp_init()
 						uint32_t phy = 0;
 						void *mem = NULL;
 						uint8_t apid = cpu->local_apic_id;
-						dbg_printf("Found AP: %u\n", apid);
+						alertf("Found AP: %u\n", apid);
 						
 						ttable[apid].stack = _PageCode(STACK_PAGES, 1, NULL);
 						memset((void*)(ttable[apid].stack), 0xCC, STACK_SIZE);
@@ -330,7 +413,7 @@ BOOL smp_init()
 					}
 					else
 					{
-						dbg_printf("Found BSP: %u\n", cpu->local_apic_id);
+						alertf("Found BSP: %u\n", cpu->local_apic_id);
 					}
 				}
 				off += MP_SIZE_PROCESSOR;

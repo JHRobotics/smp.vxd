@@ -39,6 +39,6 @@ void copy_pd(uint32_t *dest_pd, int full)
 		dest_pd[0x2FF] = 0;
 		
 		/* there are monsters under the bed */
-		dest_pd[0x000] = 0;
+		//dest_pd[0x000] = 0;
 	}
 }

@@ -2,18 +2,8 @@
 #include "smp9x.h"
 #include <stdio.h>
 
-extern DWORD smp9x_address_fly;
-extern DWORD smp9x_address_land;
-
-//DWORD __mb_cur_max_smp = 0;
-//FILE _iob_smp[_IOB_ENTRIES];
-//FILE *_iob_smp[_IOB_ENTRIES];
-
-void crt_fixer()
-{
-	//__mb_cur_max_smp = __mb_cur_max;
-	//memcpy(_iob_smp, _iob, sizeof(FILE)*_IOB_ENTRIES);
-}
+void smp9x_thread_info_attach();
+void smp9x_thread_info_detach();
 
 BOOL WINAPI DllMain(
 	HINSTANCE hinstDLL,  // handle to DLL module
@@ -24,12 +14,13 @@ BOOL WINAPI DllMain(
 	switch(fdwReason) 
 	{ 
 		case DLL_PROCESS_ATTACH:
-			crt_fixer();
 			smp9x_init();
 			break;
 		case DLL_THREAD_ATTACH:
+			smp9x_thread_info_attach();
 			break;
 		case DLL_THREAD_DETACH:
+			smp9x_thread_info_detach();
 			break;
 		case DLL_PROCESS_DETACH:
 			if(lpvReserved != NULL)

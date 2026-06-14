@@ -26,6 +26,10 @@ typedef struct _isr_desc32 {
 #define ISR_MERGE_ADDRESS(_isr) (((uint32_t)((_isr)->offset_high) << 16) | ((uint32_t)((_isr)->offset_low)))
 #define ISR_SPLIT_ADDRESS(_isr, _a) (_isr)->offset_high = (_a) >> 16; (_isr)->offset_low = (_a) & 0xFFFF
 
+#define IA32_APIC_BASE 0x1B
+#define APIC_GLOBAL_ENABLE 0x00000800
+#define APIC_BSP_FLAG 0x00000100
+
 #pragma pack(pop)
 
 #endif /* __X86_H__INCLUDED__ */

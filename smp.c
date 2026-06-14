@@ -34,6 +34,7 @@ DDB VXD_DDB = {
 
 DWORD ThisVM = 0;
 uint8_t *smp_first_mb = NULL;
+static BOOL smp_valid = FALSE;
 
 void Sys_Critical_Init_proc(){ }
 
@@ -50,14 +51,15 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
  	ThisVM = vm;
  	
  	smp_first_mb = (uint8_t*)_MapPhysToLinear(0, 1048576, 0);
-	dbg_printf("Device_Init: %s\n", VXD_DDB.DDB_Name);
+	alertf("Device_Init: %s\n", VXD_DDB.DDB_Name);
 	
 	ts_init();
 	rc = smp_init();
-	dbg_printf("SMP init status = %d\n", rc);
+	alertf("SMP init status = %d\n", rc);
 	if(rc != 0)
 	{
 		smp_switch_install();
+		smp_valid = TRUE;
 	}
 
 	tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
@@ -67,6 +69,7 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 #ifdef DEBUG
 	Set_Global_Time_Out(1000, NULL, timeout_entry);
 #endif
+	alertf("SMP ready\n");
 }
 
 void __stdcall Device_Dynamic_Init(DWORD vm)
@@ -93,7 +96,10 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 	switch(params->dwIoControlCode)
 	{
 		case DIOC_OPEN:
-			rc = 0;
+			if(smp_valid)
+			{
+				rc = 0;
+			}
 			break;
 		case DIOC_CLOSEHANDLE:
 			rc = 0;

@@ -12,4 +12,6 @@ void tracef(const char *fmt, ...);
 #define tracef(s, ...)
 #endif
 
+void alertf(const char *fmt, ...);
+
 #endif /* __VXD_DEBUG_H__INCLUDED__ */

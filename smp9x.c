@@ -23,10 +23,13 @@ typedef DWORD (WINAPI *GetCurrentProcessorNumber_t)(void);
 static DWORD smp9x_address = 0;
 static DWORD cpu_count = 0;
 static HANDLE smp_vxd = INVALID_HANDLE_VALUE;
-			 DWORD smp9x_address_fly = 0;
-			 DWORD smp9x_address_land = 0;
+//			 DWORD smp9x_address_fly = 0;
+//			 DWORD smp9x_address_land = 0;
 static GetCurrentProcessorNumber_t gcpn = NULL;
-static CRITICAL_SECTION cs;
+
+
+static CRITICAL_SECTION cs = {};
+static HANDLE memheap = NULL;
 
 typedef struct smp9x_thread
 {
@@ -59,8 +62,8 @@ void __cdecl smp9x_init()
 					NULL, 0, &smp9x_address, sizeof(DWORD),
 					NULL, NULL))
 				{
-					smp9x_address_fly = smp9x_address+SMP_OFFSET_FLY;
-					smp9x_address_land = smp9x_address+SMP_OFFSET_LAND;
+					//smp9x_address_fly = smp9x_address+SMP_OFFSET_FLY;
+					//smp9x_address_land = smp9x_address+SMP_OFFSET_LAND;
 					goto dingo; /* success */
 				} // else{printf("E:address\n");}
 				smp9x_address = 0;
@@ -70,6 +73,11 @@ void __cdecl smp9x_init()
 	} //else{printf("E:CreateFileA\n");}
 	
 	dingo:
+	memheap = HeapCreate(0, 0, 0);
+	if(memheap == NULL)
+	{
+		memheap = GetProcessHeap();	
+	}
 	
 	HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
 	if(kernel32)
@@ -162,7 +170,7 @@ int  __cdecl smp9x_cpus()
  */
 static smp9x_thread_t *thread_alloc()
 {
-	smp9x_thread_t *t = HeapAlloc(GetProcessHeap(), 0, sizeof(smp9x_thread_t));
+	smp9x_thread_t *t = HeapAlloc(memheap, 0, sizeof(smp9x_thread_t));
 	memset(t, 0, sizeof(smp9x_thread_t));
 	if(t != NULL)
 	{
@@ -172,6 +180,37 @@ static smp9x_thread_t *thread_alloc()
 		LeaveCriticalSection(&cs);
 	}
 	return t;
+}
+
+void smp9x_thread_info_attach()
+{
+	/* only save our threads */
+}
+
+void smp9x_thread_info_detach()
+{
+	smp9x_thread_t **t;
+	HANDLE h;
+	DWORD id;
+	
+	EnterCriticalSection(&cs);
+	
+	h  = GetCurrentThread();
+	id = GetCurrentThreadId();
+	t = &threads;
+	while(*t != NULL)
+	{
+		if((*t)->threadHandle == h || (*t)->threadId == id)
+		{
+			smp9x_thread_t *garbage = *t;
+			*t = garbage->prev;
+			HeapFree(memheap, 0, garbage);
+			continue;
+		}
+		t = &((*t)->prev);
+	}
+	
+	LeaveCriticalSection(&cs);
 }
 
 static DWORD WINAPI smp9x_winthread_main(LPVOID lpParameter)

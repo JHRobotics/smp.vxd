@@ -1,0 +1,24 @@
+	smp9x_init
+	smp9x_close
+	smp9x_thread_idle_proc
+	smp9x_thread_elevate
+	smp9x_thread_fly
+	smp9x_thread_land
+	smp9x_cpus
+  CreateThread@24 = smp9x_CreateThread
+  ExitThread@4 = smp9x_ExitThread
+  GetSystemInfo@4 = smp9x_GetSystemInfo
+  GetCurrentProcessorNumber@0 = smp9x_GetCurrentProcessorNumber
+  _beginthread = smp9x__beginthread
+  _beginthreadex = smp9x__beginthreadex
+  _endthread = smp9x__endthread
+  _endthreadex = smp9x__endthreadex
+  GetThreadId@4 = smp9x_GetThreadId
+  TryEnterCriticalSection@4 = TryEnterCriticalSection9x
+  InitializeCriticalSectionAndSpinCount@8 = InitializeCriticalSectionAndSpinCount9x
+; InitOnceExecuteOnce = smp9x_InitOnceExecuteOnce
+; InitializeConditionVariable = smp9x_InitializeConditionVariable
+; WakeAllConditionVariable = smp9x_WakeAllConditionVariable
+; SleepConditionVariableCS = smp9x_SleepConditionVariableCS
+; WakeConditionVariable = smp9x_WakeConditionVariable
+; SwitchToThread = smp9x_SwitchToThread

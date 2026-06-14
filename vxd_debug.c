@@ -26,3 +26,10 @@ void tracef(const char *fmt, ...)
 
 #endif
 
+void alertf(const char *fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	terrorvf(TERROR_MGA, fmt, va);
+	va_end(va);
+}
