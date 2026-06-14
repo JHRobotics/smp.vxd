@@ -183,7 +183,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 	DWORD msr_hi = 0;
 
 	lapic32 = (volatile uint32_t*)_MapPhysToLinear(lapic, 4096, 0);
-	alertf("lapic32: %X => %X\n", lapic, lapic32);
+	dbg_printf("lapic32: %X => %X\n", lapic, lapic32);
 	
 	/*
 		get the BSP's Local APIC ID
@@ -211,17 +211,17 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 	 */
 	memcpy(smp_first_mb+AP_BOOT_ADDR, apboot, apboot_len);
 
-	alertf("IA32_APIC_BASE = 0x%lX\n", msr_lo);
+	dbg_printf("IA32_APIC_BASE = 0x%lX\n", msr_lo);
 	
 	lapic32[0xF0/4] |= 1 << 8;
 	udelay(10);
-	alertf("APIC enabled, wait for ready\n");
+	dbg_printf("APIC enabled, wait for ready\n");
 	
 
 	while((lapic32[0x300/4] & (1 << 12)) != 0)
 	{
 		udelay(100);
-		alertf("%X ", lapic32[0x300/4]);
+		dbg_printf("%X ", lapic32[0x300/4]);
 	}
 	
 	dbg_printf("APIC ready\n");
@@ -235,7 +235,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		// do not start BSP, that's already running this code
 		if(i == bspid) continue;
 		
-		alertf("starting AP: #%d data=0x%lX stack=0x%lX cr3=0x%lX\n",
+		dbg_printf("starting AP: #%d data=0x%lX stack=0x%lX cr3=0x%lX\n",
 			i, ttable[i].data, ttable[i].stack, ttable[i].data->cpu_cr3);
 			
 		copy_pd(ttable[i].data->pd, 1);
@@ -286,7 +286,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 			} while((lapic32[0x300/4] & (1 << 12)) != 0); // wait for delivery
 		}
 		
-		alertf("wait for boot, apid=0x%X, data=0x%lX stack=0x%lX\n", i, ttable[i].data, ttable[i].stack);
+		dbg_printf("wait for boot, apid=0x%X, data=0x%lX stack=0x%lX\n", i, ttable[i].data, ttable[i].stack);
 		
 		// wait for CPU boot
 		while(ttable[i].data->status == S_BUSY)
@@ -351,7 +351,7 @@ BOOL smp_init()
 		DWORD off;
 		mpct_t *ct = (mpct_t *)(smp_first_mb + mpfp->configuration_table);
 		
-		alertf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
+		dbg_printf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
 		
 		if(memcmp(ct->signature, MPCT_MAGIC, 4) != 0)
 		{
@@ -380,7 +380,7 @@ BOOL smp_init()
 			isr++;
 		}
 		
-		alertf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
+		dbg_printf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
 		
 		dbg_printf("going to list CPU: %d entries\n", ct->entry_count);
 		off = sizeof(mpct_t);
@@ -398,7 +398,7 @@ BOOL smp_init()
 						uint32_t phy = 0;
 						void *mem = NULL;
 						uint8_t apid = cpu->local_apic_id;
-						alertf("Found AP: %u\n", apid);
+						dbg_printf("Found AP: %u\n", apid);
 						
 						ttable[apid].stack = _PageCode(STACK_PAGES, 1, NULL);
 						memset((void*)(ttable[apid].stack), 0xCC, STACK_SIZE);
@@ -434,7 +434,7 @@ BOOL smp_init()
 					}
 					else
 					{
-						alertf("Found BSP: %u\n", cpu->local_apic_id);
+						dbg_printf("Found BSP: %u\n", cpu->local_apic_id);
 					}
 				}
 				off += MP_SIZE_PROCESSOR;

@@ -22,3 +22,4 @@
 ; SleepConditionVariableCS = smp9x_SleepConditionVariableCS
 ; WakeConditionVariable = smp9x_WakeConditionVariable
 ; SwitchToThread = smp9x_SwitchToThread
+

@@ -1,0 +1,9 @@
+WS2_32.dll
+	WSACleanup@0 STUB
+	WSAGetLastError@0 STUB
+	WSAStartup@4 STUB
+	accept STUB
+	bind STUB
+	connect STUB
+	listen STUB
+	socket STUB

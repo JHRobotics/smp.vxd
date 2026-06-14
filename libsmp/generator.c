@@ -294,7 +294,7 @@ int main(int argc, char *argv[])
 			{
 				for(b = a->func; b != NULL; b = b->next)
 				{
-					if((b->flags & (F_HASBODY | F_STUB | F_DATA | F_REDIRECT)) == 0)
+					if((b->flags & (F_HASBODY | F_DATA | F_REDIRECT)) == 0)
 					{
 						fprintf(def, "\t%s = hook_%s\n", b->name, b->name);
 					}

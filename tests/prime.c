@@ -33,6 +33,20 @@
 #include "smp9x.h"
 #endif
 
+uint64_t atoull(const char *ptr)
+{
+	int i = 0;
+	uint64_t n = 0;
+	while(ptr[i] >= '0' && ptr[i] <= '9')
+	{
+		n  = n*10;
+		n += ptr[i] - '0';
+		i++;
+	}
+
+	return n;
+}
+
 uint64_t sqrt64(uint64_t n)
 {
 	uint64_t left = 0;
@@ -249,7 +263,7 @@ int main(int argc, char **argv)
 	
 	if(argc >= 3)
 	{
-		bench = strtoull(argv[2], NULL, 0);
+		bench = atoull(argv[2]);
 	}
 	
 	if(bench < 1000ULL)
@@ -263,7 +277,7 @@ int main(int argc, char **argv)
 		threads = si.dwNumberOfProcessors;
 	}
 
-	printf("cpus = %lu, using threads = %d\n", si.dwNumberOfProcessors, threads);
+	printf("cpus = %lu, using threads = %d, bench=%llu\n", si.dwNumberOfProcessors, threads, bench);
 	cnt = count_primes_mp(0, bench, threads);
 	
 	t = clock() - t;

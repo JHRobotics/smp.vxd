@@ -72,15 +72,16 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
  	ThisVM = vm;
  	
  	smp_first_mb = (uint8_t*)_MapPhysToLinear(0, 1048576, 0);
-	alertf("Device_Init: %s\n", VXD_DDB.DDB_Name);
+	//alertf("Device_Init: %s\n", VXD_DDB.DDB_Name);
 	
 	ts_init();
 	rc = smp_init();
-	alertf("SMP init status = %d\n", rc);
+	//alertf("SMP init status = %d\n", rc);
 	if(rc != 0)
 	{
 		smp_switch_install();
 		smp_valid = TRUE;
+		alertf("SMP driver init success, CPUs=%d\n", cpu_count);
 	}
 
 	tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
@@ -90,7 +91,7 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 #ifdef DEBUG
 	Set_Global_Time_Out(1000, NULL, timeout_entry);
 #endif
-	alertf("SMP ready\n");
+//	alertf("SMP ready\n");
 }
 
 void __stdcall Device_Dynamic_Init(DWORD vm)
