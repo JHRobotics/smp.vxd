@@ -14,6 +14,7 @@ WCC_AS=wasm
 FASM=fasm
 BIN2H=bin2h
 CAT=cat
+CP=cp -f
 
 GCC_CC=gcc
 GCC_INC=-I.
@@ -157,3 +158,11 @@ clean:
 	-$(RM) mesasmp.dll
 	-$(RM) $(GENERATED)
 	-$(RM) $(TOOLS)
+
+release: all
+	$(CP) smp.vxd release/driver/smp.vxd
+	$(CP) libsmp.dll release/test-basic/libsmp.dll
+	$(CP) mesasmp.dll release/test-mesa3d/mesasmp.dll
+	$(CP) tests/*.exe release/test-basic/
+	$(CP) README.md release/readme.txt
+	$(CP) LICENSE release/licence.txt

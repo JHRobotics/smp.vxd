@@ -19,13 +19,13 @@ This isn't magic trick how increase performance on legacy games but allow you to
 
 ### Installation
 
-Copy smp.vxd to C:\WINDOWS\system (not system32!). Edit C:\WINDOWS\system.ini and under `[386enh]` and following line:
+Copy smp.vxd to C:\WINDOWS\system (not system32!). Edit C:\WINDOWS\system.ini and under `[386enh]` add following line:
 
 ```
 device=smp.vxd
 ```
 
-And reboot computer. Boot you cant run `cpuinfo.exe` to check if driver is loaded and number of CPUs.
+And reboot computer. Boot you cant run `smpload.exe` to check if driver is loaded and number of CPUs.
 
 ### Uninstallation
 
@@ -33,7 +33,7 @@ Edit C:\WINDOWS\system.ini and under under `[386enh]` remove line:
 ```
 device=smp.vxd
 ```
-(or you can comment line like, if you need only temporary disable)
+(or you can comment line, if you wish only temporary disable)
 ```
 rem device=smp.vxd
 ```
@@ -52,8 +52,11 @@ You need:
 make
 ```
 
-This should make 
-
+This should product:
+- smp.vxd: driver itself
+- libsmp.dll: intermediate library
+- mesasmp.dll: intermediate library for Mesa9x
+- tests/*.exe: some functionality test
 
 ## Programmers guide
 
@@ -212,6 +215,7 @@ int main()
 
 There we thing you should known at begging, good things first: Windows 9x known nothing about SMP and leave all AP untouched, Windows 9x are based on microcore (vmm.vxd) so is possible extend system functionality more than (semi-, hybrid) monolithic kernel - like NT or Unix (BDS and Linux included). Bad things: there is only one page directory (PD) - by Intel recommendation every process should have own PD (physical address to PD in on CR3 register) - but on Windows 9x is only one PD and for every process switch needs to rebuilt it (that why there so much issue with newer CPUs and virtual machines).
 
+TODO: write this guide...
 
 ## Thanks
 

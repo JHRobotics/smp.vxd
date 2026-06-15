@@ -1,5 +1,6 @@
 # some my garbage
 /test/
+/release/
 
 *.drv
 *.vxd
