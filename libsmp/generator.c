@@ -74,6 +74,7 @@ void write_stub(FILE *out, const char *func_name, int stack_args)
 #define F_STUB    4
 #define F_DATA    8
 #define F_REDIRECT 16
+#define F_NOCRT 32
 
 typedef struct func_list
 {
@@ -110,6 +111,7 @@ unsigned parse_flags()
 	if(strstr(buf_param, "STUB") != NULL)      f |= F_STUB;
 	if(strstr(buf_param, "DATA") != NULL)      f |= F_DATA;
 	if(strstr(buf_param, "REDIRECT") != NULL)  f |= F_REDIRECT;
+	if(strstr(buf_param, "NOCRT") != NULL)     f |= F_NOCRT;
 	
 	return f;
 }
@@ -269,7 +271,7 @@ int main(int argc, char *argv[])
 			{
 				write_stub(fw, b->name, b->params);
 			}
-			else if((b->flags & (F_HASBODY | F_REDIRECT | F_DATA)) == 0)
+			else if((b->flags & (F_HASBODY | F_REDIRECT | F_DATA | F_NOCRT)) == 0)
 			{
 				write_fn(fw, b->name, b->linkname);
 			}
@@ -294,13 +296,17 @@ int main(int argc, char *argv[])
 			{
 				for(b = a->func; b != NULL; b = b->next)
 				{
-					if((b->flags & (F_HASBODY | F_DATA | F_REDIRECT)) == 0)
+					if((b->flags & (F_HASBODY | F_DATA | F_REDIRECT | F_NOCRT)) == 0)
 					{
 						fprintf(def, "\t%s = hook_%s\n", b->name, b->name);
 					}
 					else if((b->flags & (F_DATA | F_REDIRECT)) == (F_DATA | F_REDIRECT))
 					{
 						fprintf(def, "\t%s = %s.%s DATA\n", b->name, a->base, b->name);
+					}
+					else if((b->flags & F_NOCRT) != 0)
+					{
+						fprintf(def, "\t%s = nocrt_%s\n", b->name, b->name);
 					}
 					else if((b->flags & F_REDIRECT) != 0)
 					{

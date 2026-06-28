@@ -18,7 +18,7 @@ CP=cp -f
 
 GCC_CC=gcc
 GCC_INC=-I.
-GCC_CFLAGS=-std=c99 -Wall -DSMP9X
+GCC_CFLAGS=-std=c99 -Wall -DSMP9X -DNOCRT -DNOCRT_FLOAT -DNOCRT_NOREPLACE
 GCC_LDFLAGS=
 GCC_LDFLAGS_WIN=-mwindows $(GCC_LDFLAGS)
 
@@ -30,8 +30,10 @@ SMP_VXD_OBJS=smp.wcc.obj vxd_lib.wcc.obj vxd_debug.wcc.obj smp_init.wcc.obj smp_
 
 SMP9X_OBJS=smp9x.gcc.o
 
+NOCRT_OBJS=nocrt/nocrt.gcc.o nocrt/nocrt_math.gcc.o
+
 LIBSMP_OBJS=$(SMP9X_OBJS) libsmp_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o
-MESASMP_OBJS=$(SMP9X_OBJS) mesa_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o
+MESASMP_OBJS=$(SMP9X_OBJS) $(NOCRT_OBJS) libsmp/copy.fasm.o mesa_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o
 
 SMP_TESTS=tests/prime1.exe tests/prime2.exe tests/prime3.exe tests/smpload.exe tests/systemcall.exe \
   tests/doscall.exe
@@ -63,7 +65,7 @@ smp_init.wcc.obj: apboot.h apkernel.h
 #%.obj: %.asm $(DEPS)
 #	$(WCC_AS) $(AFLAGS) $<
 
-%.fasm.obj: %.asm $(DEPS)
+%.fasm.o: %.asm $(DEPS)
 	$(FASM) $< $@
 
 %.gcc.o: %.c $(GCC_DEPS)
@@ -92,9 +94,9 @@ libsmp_hook.o: generator.exe libsmp.txt
 	$(CAT) libsmp/smp9x.def >> libsmp.def
 	$(FASM) libsmp_hook.asm $@
 
-mesasmp.txt: libsmp\kernel32.txt libsmp\msvcrt.txt libsmp\ws2_32.txt
+mesasmp.txt: libsmp\kernel32.txt libsmp\msvcrt_nocrt.txt libsmp\ws2_32.txt
 	$(CAT) libsmp\kernel32.txt > $@
-	$(CAT) libsmp\msvcrt.txt >> $@
+	$(CAT) libsmp\msvcrt_nocrt.txt >> $@
 	$(CAT) libsmp\ws2_32.txt >> $@
 
 mesa_hook.o: generator.exe mesasmp.txt
@@ -103,10 +105,10 @@ mesa_hook.o: generator.exe mesasmp.txt
 	$(FASM) mesa_hook.asm $@
 
 libsmp.dll: $(LIBSMP_OBJS)
-	$(GCC_CC) $(CFLAGS) $(LIBSMP_OBJS) -shared -o $@ -Wl,--subsystem,windows -Wl,--kill-at -Wl,--enable-stdcall-fixup -lkernel32 -luser32 -lmsvcrt libsmp.def
+	$(GCC_CC) $(CFLAGS) $(LIBSMP_OBJS) -shared -o $@ -Wl,--subsystem,windows -Wl,--kill-at -Wl,--enable-stdcall-fixup -lkernel32 -luser32 -lmsvcrt libsmp.def -static
 
 mesasmp.dll: $(MESASMP_OBJS)
-	$(GCC_CC) $(CFLAGS) $(MESASMP_OBJS) -shared -o $@ -Wl,--subsystem,windows -Wl,--kill-at -Wl,--enable-stdcall-fixup -lkernel32 -luser32 -lmsvcrt mesasmp.def
+	$(GCC_CC) $(CFLAGS) $(MESASMP_OBJS) -shared -o $@ -Wl,--subsystem,windows -Wl,--kill-at -Wl,--enable-stdcall-fixup -lkernel32 -luser32 -lmsvcrt mesasmp.def -static
 
 tests/smpload.exe: tests/smpload.gcc.o
 	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS_WIN)
@@ -154,7 +156,7 @@ clean:
 	-$(RM) $(SMP_TESTS_OBJS)
 	-$(RM) $(LIBSMP_OBJS)
 	-$(RM) libsmp.dll
-	-$(RM) MESASMP_OBJS
+	-$(RM) $(MESASMP_OBJS)
 	-$(RM) mesasmp.dll
 	-$(RM) $(GENERATED)
 	-$(RM) $(TOOLS)

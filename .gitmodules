@@ -1,3 +1,8 @@
 [submodule "fixlink"]
 	path = fixlink
 	url = https://github.com/JHRobotics/fixlink.git
+	branch = main
+[submodule "nocrt"]
+	path = nocrt
+	url = https://github.com/JHRobotics/nocrt.git
+	branch = main
