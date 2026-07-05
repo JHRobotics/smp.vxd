@@ -19,13 +19,13 @@ This isn't magic trick how increase performance on legacy games but allow you to
 
 ### Installation
 
-Copy smp.vxd to C:\WINDOWS\system (not system32!). Edit C:\WINDOWS\system.ini and under `[386enh]` add following line:
+Copy `smp.vxd` to `C:\WINDOWS\system` (not `system32`!). Edit `C:\WINDOWS\system.ini` and under `[386enh]` add following line:
 
 ```
 device=smp.vxd
 ```
 
-And reboot computer. Boot you cant run `smpload.exe` to check if driver is loaded and number of CPUs.
+And reboot computer. After boot you cant run `smpload.exe` to check if driver is loaded and number of CPUs.
 
 ### Uninstallation
 
@@ -213,9 +213,69 @@ int main()
 
 ## Hackers guide
 
-There we thing you should known at begging, good things first: Windows 9x known nothing about SMP and leave all AP untouched, Windows 9x are based on microcore (vmm.vxd) so is possible extend system functionality more than (semi-, hybrid) monolithic kernel - like NT or Unix (BDS and Linux included). Bad things: there is only one page directory (PD) - by Intel recommendation every process should have own PD (physical address to PD in on CR3 register) - but on Windows 9x is only one PD and for every process switch needs to rebuilt it (that why there so much issue with newer CPUs and virtual machines).
+There are things you should known at beginning, good things first: Windows 9x known nothing about SMP and leave all AP untouched, Windows 9x are based on microcore (vmm.vxd) so is possible extend system functionality more than (semi-, hybrid) monolithic kernel - like NT or Unix (BDS and Linux included). Bad things: there is only one page directory (PD) - by Intel recommendation every process should have own PD (physical address to PD is on CR3 register) - but on Windows 9x is only one PD and for every process switch needs to rebuilt it (that why there so much issue with newer CPUs and virtual machines).
 
-TODO: write this guide...
+How basically SMP works you can learn from [OSDev WIKI](https://wiki.osdev.org/Symmetric_Multiprocessing). When writing OS from sketch is adding SMP support very easy (much then NUMA) but implement it to close source more than 30 years old OS is a bit tough. Where is basic concept:
+
+1) On **BSP** runs Windows (vmm.vxd) as usual.
+2) On **AP** runs special OS called APC/S (Application Processor Controller/Supervisor)
+	-	boot sequence is in [apboot.asm](blob/master/apboot.asm)
+	-	kernel itself is in [apkernel.asm](blob/master/apkernel.asm)
+3) When **AP** in not used, is goes to sleep state (ASM: sti; hlt). This is quite important for VM or laptops because when AP burns NOP in loop its affect BSP performance to.
+
+APC/S is very simple, after setup the AP, there is FSM (finite state machine) which circles process states:
+- S_READY: AP is free to do some work (go to S_SLEEP when no WORK)
+- S_SLEEP: AP is free to do some work but needs wake-up first
+- S_LOADED: process was moved from BSP and ready to run
+- S_RUNNING: process running
+- S_CARGO: process is done and needs to be moved to BSP
+- S_DIRCARD: process is done but result will be drop (process was terminated for example).
+
+Communication between AP and Windows/BSP is done by using int3 (0xCC opcode). To determine what is control sequence and debug code we're checking address when INT occurs.
+
+Kernel code (kernel page) is shared between APs and BSP and code from it can be called by AP and BSP (see `is_bsp()` on `kernel.asm` how determine where we are). But every AP need own private mem:
+- private stack 32k (8 pages):
+  - 16k: kernel
+  - 8k: place holder (low priority procedure for Windows scheduler, when context is running on AP)
+  - 8k: TSS - task segment switch, when switching between RING 0 (process loading/unloading here) and RING 3 (running context).
+
+- data pages 8k (2 pages):
+  - process state (CPU registers + FPU/XMM/AVX state)
+  - PD (page dictionary): when process switch, we need copy it, not only assign other CR3 (there is only one PD on Windows 9x and rebuilds on every process switch, linear address is 0xFFBFE000, when you want to look).
+
+### BSP to AP
+
+To switch context from BSP to AP you need call `fly()` on kernel page. Also `smp.vxd` hooks thread switch so every suitable process can be switched to AP automatically. When done, on BSP is running placement (decrease priory and call `Sleep(0)` - [see zero value description on MSDN](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-sleep)), AP call `iret` do switch RING and loaded CPU user CPU state.
+
+APC/S using following segments (flat memory model):
+- system code: 0x8
+- system data: 0x10
+- user code 0x18
+- user data 0x20
+- TSS: 0x28
+
+But how AP can handle system call or exception? Very easy, on Win9x system call are done thought call gate on `FS` segment and system DLL are placed on 0xBFFxxxx address. As you see even though
+VMM.VXD is dynamic core, kernel32.dll subsystem is nice monolith. So APC/S has traps on these pages  and FS segment and on exception (also on any other besides int3 on kernel pages) is switched back and rerun instruction which fired this exception.
+
+### AP to BSP
+
+When code is done on AP (by int/exception or called `land()`), is released lock on placement function, priority is updated and called `reattach()`. `reattach()` just fire int3 and in exception handler is context replaced to one from AP.
+
+### Debug
+
+For debugging I'm using COM0 and COM1 (on VM you can route output to pipe/TCP/file). For enable debug create file `config.mk` with this content:
+
+```
+HAVE_CONFIG_MK=1
+
+DEBUG=1
+APP_DEBUG=1
+```
+
+When `DEBUG` defined SMP.VXD unit COM0 + C0M1 and output messages to them. When `APP_DEBUG` defined `libsmp.dll` and examples are build for debug.
+
+Don't forget call `make clean` when changes these defines'
+
 
 ## Thanks
 

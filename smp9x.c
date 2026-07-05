@@ -127,10 +127,17 @@ void __cdecl smp9x_thread_idle_proc(volatile DWORD *lock_ptr)
 	{
 		if(lock_ptr != NULL)
 		{
+			int def_priority = 0;
+			HANDLE curr = GetCurrentThread();
+			def_priority = GetThreadPriority(curr);
+			SetThreadPriority(curr, THREAD_PRIORITY_LOWEST);
+			
 			while(*lock_ptr != 0)
 			{
 				Sleep(0);
 			}
+			
+			SetThreadPriority(curr, def_priority);
 		}
 		reattach();
 	}

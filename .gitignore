@@ -27,4 +27,10 @@ config.mk
 /apboot.bin
 /apboot.h
 /apkernel.bin
-apkernel.h
+/apkernel.h
+/libsmp.def
+/libsmp.txt
+/libsmp_hook.asm
+/mesa_hook.asm
+/mesasmp.def
+/mesasmp.txt

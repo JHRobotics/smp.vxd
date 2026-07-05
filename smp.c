@@ -77,20 +77,22 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 	ts_init();
 	rc = smp_init();
 	//alertf("SMP init status = %d\n", rc);
-	if(rc != 0)
+	if(rc != FALSE)
 	{
 		smp_switch_install();
 		smp_valid = TRUE;
 		alertf("SMP driver init success, CPUs=%d\n", cpu_count);
+		
+
+		tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
+			sizeof(tdata_t), sizeof(CRS_32));
+			
+#ifdef DEBUG
+		Set_Global_Time_Out(1000, NULL, timeout_entry);
+#endif
 	}
 
-	tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
-		sizeof(tdata_t), sizeof(CRS_32)
-	);
 
-#ifdef DEBUG
-	Set_Global_Time_Out(1000, NULL, timeout_entry);
-#endif
 //	alertf("SMP ready\n");
 }
 

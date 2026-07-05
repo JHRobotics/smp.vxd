@@ -15,7 +15,7 @@ _fast_memset:
 	; [esp+20] num
 	mov eax,[esp+16]	
 	; expand 0x??????XY to 0xXYXYXYXY
-	mov al,ah
+	mov ah,al
 	mov ecx,eax
 	bswap eax
 	mov ax,cx

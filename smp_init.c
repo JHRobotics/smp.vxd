@@ -129,6 +129,9 @@ static mpfp_t *mpfp = NULL;
 int cpu_count = 0;
 static volatile uint32_t *lapic32 = NULL;
 
+static uint32_t *boot_pde = NULL;
+static uint32_t  boot_pde_phy = NULL;
+
 #define PAGE_BACKUP_SIZE 512
 static uint8_t page_backup[PAGE_BACKUP_SIZE];
 
@@ -182,7 +185,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 	DWORD msr_lo = 0;
 	DWORD msr_hi = 0;
 
-	lapic32 = (volatile uint32_t*)_MapPhysToLinear(lapic, 4096, 0);
+	lapic32 = (volatile uint32_t*)_MapPhysToLinear(lapic, P_SIZE, 0);
 	dbg_printf("lapic32: %X => %X\n", lapic, lapic32);
 	
 	/*
@@ -206,6 +209,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 
 	/* backup memory before write here bootloader */
 	memcpy(page_backup, smp_first_mb+AP_BOOT_ADDR, PAGE_BACKUP_SIZE);
+	
 	/* copy the AP trampoline code to a fixed address in low conventional memory
 	 (to address 0x0800:0x0000)
 	 */
@@ -237,8 +241,12 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		
 		dbg_printf("starting AP: #%d data=0x%lX stack=0x%lX cr3=0x%lX\n",
 			i, ttable[i].data, ttable[i].stack, ttable[i].data->cpu_cr3);
-			
+		
 		copy_pd(ttable[i].data->pd, 1);
+		
+		/* when PG is enable, we need pd/pde to map 0x8000 linear to 0x8000 phy */
+		ttable[i].data->pd[0] = boot_pde_phy | 0x7; /* P | R/W | U/S */
+		// 0 => 0x8000 >> 22
 
 		vars->gdt_size    = sizeof(def_gdt)-1;
 		vars->gdt_address = (uint32_t)(ttable[i].data->gdt);
@@ -361,6 +369,8 @@ BOOL smp_init()
 				
 		ttable = (titem_t*)_PageCode(RoundToPages(sizeof(titem_t)*MAX_CORES), 1, NULL);
 		kernel = (uint8_t*)_PageCode(1, 0, NULL);
+		boot_pde = (uint32_t*)_PageCode(1, 1, &boot_pde_phy);
+		
 		if(kernel == 0)
 		{
 			alertf("cannot allocate kernel\n");
@@ -379,6 +389,9 @@ BOOL smp_init()
 			ISR_SPLIT_ADDRESS(isr, a);
 			isr++;
 		}
+		
+		/* boot record PDE */
+		boot_pde[0x8000 >> 12] = 0x8000 | 0x107; /* P | R/W | U/S | G */
 		
 		dbg_printf("mpfp->configuration_table = %lX\n", mpfp->configuration_table);
 		
