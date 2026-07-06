@@ -56,44 +56,58 @@ DDB VXD_DDB = {
 DWORD ThisVM = 0;
 uint8_t *smp_first_mb = NULL;
 static BOOL smp_valid = FALSE;
+static cpuid_result_t cpu_flags;
+
+uint32_t xsave_flags = 0;
+BOOL no_sys_fxsave = FALSE;
 
 void Sys_Critical_Init_proc(){ }
 
 void __declspec(naked) timeout_entry();
+
 
 /* CommandTail: Address of the command tail retrieved from the program segment prefix (PSP) of VMM32.VXD. The first byte in the command tail specifies the length in bytes of the tail. 
 */
 void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 {
 	BOOL rc;
+	cpuid_result_t cpuid_res;
+	
 	dbg_init();
 	
 	VMMCall(_Allocate_Device_CB_Area);
  	ThisVM = vm;
  	
- 	smp_first_mb = (uint8_t*)_MapPhysToLinear(0, 1048576, 0);
-	//alertf("Device_Init: %s\n", VXD_DDB.DDB_Name);
-	
-	ts_init();
-	rc = smp_init();
-	//alertf("SMP init status = %d\n", rc);
-	if(rc != FALSE)
-	{
-		smp_switch_install();
-		smp_valid = TRUE;
-		alertf("SMP driver init success, CPUs=%d\n", cpu_count);
+ 	memset(&cpu_flags, 0, sizeof(cpuid_result_t));
+ 	cpuid(0, &cpuid_res);
+ 	if(cpuid_res.regs.regEAX >= 1)
+ 	{
+ 		cpuid(1, &cpu_flags);
+ 	}
+ 	
+ 	if((cpu_flags.regs.regEDX & CPUID_EDX_APIC) != 0)
+ 	{
+	 	smp_first_mb = (uint8_t*)_MapPhysToLinear(0, 1048576, 0);
+		//alertf("Device_Init: %s\n", VXD_DDB.DDB_Name);
 		
-
-		tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
-			sizeof(tdata_t), sizeof(CRS_32));
+		ts_init();
+		rc = smp_init();
+		//alertf("SMP init status = %d\n", rc);
+		if(rc != FALSE)
+		{
+			smp_switch_install();
+			smp_valid = TRUE;
+			alertf("SMP driver init success, CPUs=%d\n", cpu_count);
 			
-#ifdef DEBUG
-		Set_Global_Time_Out(1000, NULL, timeout_entry);
-#endif
+	
+			tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
+				sizeof(tdata_t), sizeof(CRS_32));
+				
+	#ifdef DEBUG
+			Set_Global_Time_Out(1000, NULL, timeout_entry);
+	#endif
+		}
 	}
-
-
-//	alertf("SMP ready\n");
 }
 
 void __stdcall Device_Dynamic_Init(DWORD vm)

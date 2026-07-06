@@ -171,6 +171,147 @@ void smp_switch_uninstall()
 	Unhook_PM_Fault(0x3, ((DWORD)callback_int3_entry) + CALLBACK_HEADER_SIZE);
 }
 
+#define SAVE_NOP 0
+#define SAVE_FXSAVE 1
+#define SAVE_XSAVE_ALL 2
+#define SAVE_XSAVE_AVX 3
+
+static int fpu_save_method(sys)
+{
+	int m = SAVE_NOP;
+	if(sys)
+	{
+		if(xsave_flags == 0 && no_sys_fxsave) /* no AVX and Windows 95 */
+		{
+			m = SAVE_FXSAVE;
+		}
+		else if(xsave_flags != 0 && no_sys_fxsave) /* AVX and Windows 95 */
+		{
+			m = SAVE_XSAVE_ALL;
+		}
+		else if(xsave_flags != 0) /* AVX and > Windows 95 */
+		{
+			m = SAVE_XSAVE_AVX;
+		}
+	}
+	else
+	{
+		if(xsave_flags == 0)
+		{
+			m = SAVE_FXSAVE;
+		}
+		else
+		{
+			m = SAVE_XSAVE_ALL;
+		}
+	}
+	
+	return m;
+}
+
+void fpu_save(BOOL sys, uint8_t *dst)
+{
+	int m = fpu_save_method(sys);
+	
+	switch(m)
+	{
+		case SAVE_NOP:
+			break;
+		case SAVE_FXSAVE:
+			_asm
+			{
+				push edx
+				mov edx, [dst]
+				fxsave [edx]
+				pop edx
+			};
+			break;
+		case SAVE_XSAVE_ALL:
+			_asm
+			{
+				push edx
+				push edi
+				mov edi, [dst]
+				mov eax, [xsave_flags]
+				xor edx,edx
+				db 0x0f,0xc7,0x27  /* xsavec [edi] */
+				pop edi
+				pop edx
+			}
+			break;
+		case SAVE_XSAVE_AVX:
+			_asm
+			{
+				push edx
+				push edi
+				mov edi, [dst]
+				mov eax, [xsave_flags]
+				xor edx,edx
+				and eax, 0xFFFFFFFC
+				db 0x0f,0xc7,0x27  /* xsavec [edi] */
+				pop edi
+				pop edx
+			}
+			break;
+	}
+}
+
+void fpu_restore(BOOL sys, const uint8_t *src)
+{
+	int m = fpu_save_method(sys);
+	
+	switch(m)
+	{
+		case SAVE_NOP:
+			break;
+		case SAVE_FXSAVE:
+			_asm
+			{
+				push edx
+				mov edx, [src]
+				fxrstor [edx]
+				pop edx
+			};
+			break;
+		case SAVE_XSAVE_ALL:
+			_asm
+			{
+				push edx
+				push edi
+				mov edi, [src]
+				mov eax, [xsave_flags]
+				xor edx,edx
+				db 0x0F,0xAE,0x2F  /* xrstor [edi]*/
+				pop edi
+				pop edx
+			}
+			break;
+		case SAVE_XSAVE_AVX:
+			_asm
+			{
+				push edx
+				push edi
+				mov edi, [src]
+				mov eax, [xsave_flags]
+				xor edx,edx
+				and eax, 0xFFFFFFFC
+				db 0x0F,0xAE,0x2F  /* xrstor [edi] */
+				pop edi
+				pop edx
+			}
+			break;
+	}
+}
+
+BOOL fpu_need_extra_space()
+{
+	if(fpu_save_method(TRUE) == SAVE_NOP)
+	{
+		return FALSE;
+	}
+	return TRUE;
+}
+
 int switch_to_ap(PCRS_32 crs, DWORD thread_id)
 {
 	BOOL found = FALSE;
@@ -201,8 +342,9 @@ int switch_to_ap(PCRS_32 crs, DWORD thread_id)
 							{
 								*(ts->smp_bsp_idle_lock) = 1;
 							
-								ttable[cpu].data->proc_cr4 = GetCR4();
+								//ttable[cpu].data->proc_cr4 = GetCR4();
 								ttable[cpu].data->thread_id = thread_id;
+								fpu_save(FALSE, ttable[cpu].data->fpu_state);
 							
 								memcpy(ttable[cpu].data->proc_state, crs, CRS_32_EFECTIVE_SIZE);
 
@@ -266,6 +408,8 @@ int switch_to_bsp(PCRS_32 crs, DWORD thread_id)
 				DWORD *stack;
 				DWORD tmp_eip;
 				memcpy(crs, ttable[ts->smp_apid].data->proc_state, CRS_32_EFECTIVE_SIZE);
+				fpu_restore(FALSE, ttable[ts->smp_apid].data->fpu_state);
+				
 				tmp_eip = crs->Client_EIP;
 				
 				stack = (DWORD*)(crs->Client_ESP);

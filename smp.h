@@ -113,16 +113,16 @@ typedef struct tdata
 	uint32_t thread_id;        // 4
 	uint32_t entry;            // 8
 	uint32_t cpu_cr3;          // 12
-	uint32_t proc_cr4;         // 16
+	uint32_t cpu_cr4;          // 16
 	uint32_t *pd;              // 20
 	uint32_t index;            // 24
-	uint32_t pad;              // 28
+	uint32_t xsaveflags;       // 28
 	uint32_t gdt[32];          // 32
 	uint8_t  init_state[128];  // 160  -> tagCRS_32
 	uint8_t  proc_state[128];  // 288 -> tagCRS_32
 	uint32_t tss[32];          // 416 (size 104)
-	uint8_t  fpu_state[512];   // 544
-} tdata_t;                   // size: 1056
+	uint8_t  fpu_state[1024];  // 544
+} tdata_t;                   // size: 1568
 
 typedef struct titem
 {
@@ -170,5 +170,12 @@ void smp_elevate(DWORD proc, DWORD lockaddr, DWORD mode);
 BOOL smp_switch_install();
 
 void copy_pd(uint32_t *dest_pd, int full);
+
+extern uint32_t xsave_flags;
+extern BOOL no_sys_fxsave;
+
+void fpu_save(BOOL sys, uint8_t *dst);
+void fpu_restore(BOOL sys, const uint8_t *src);
+BOOL fpu_need_extra_space();
 
 #endif /* __SMP_H__INCLUDED__ */

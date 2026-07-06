@@ -61,9 +61,10 @@ tdata_status     equ 0
 tdata_thread_id  equ 4
 tdata_entry      equ 8
 tdata_cpu_cr3    equ 12
-tdata_proc_cr4   equ 16
+tdata_cpu_cr4    equ 16
 tdata_pd         equ 20
 tdata_index      equ 24
+tdata_xsaveflags equ 28
 tdata_gdt        equ 32
 tdata_init_state equ 160
 tdata_proc_state equ 288
@@ -152,6 +153,9 @@ _kernel_boot:
 	shl ebx, 3                       ; sizeof(titem) = 8 bytes
 	add edi, ebx                     ; eax -> [titem]
 	mov esi, [edi+4]                 ; esi -> [tdata]
+	
+	; enable SSE / XSAVE / AVX
+	call init_xsave
 	
 	lea edx, [esi+tdata_entry]       ; esi -> [entry]
 	mov ebx, esi                     ; ebx -> [status]
@@ -262,8 +266,18 @@ _switchtask:
 	push 	eax
 	
 	; restore FPU/MMX/SSE state
+	mov eax, esi
+	sub eax, tdata_proc_state-tdata_xsaveflags ; xsaveflags
+	mov eax, [eax]
 	add   esi, tdata_fpu_state-tdata_proc_state ; fpu_state
-	fxrstor [esi]
+	test eax,eax
+	jz use_fxrstor
+		xor edx,edx
+		xrstor [esi]
+		jmp fpu_loaded
+	use_fxrstor:
+		fxrstor [esi]
+	fpu_loaded:
 	
 	; set all data segments
 	mov eax, user_ds
@@ -324,8 +338,16 @@ switch_back:
 	;
 	; save FPU state
 	;
+	mov eax, [ebx+tdata_xsaveflags]
 	lea edi, [ebx+tdata_fpu_state]
-	fxsave [edi]
+	test eax, eax
+	jz use_fxsave
+		xor edx,edx
+		xsavec [edi]
+		jmp fpu_saved
+	use_fxsave:
+		fxsave [edi]
+	fpu_saved:
 	
 	;
 	; load init state
@@ -453,6 +475,26 @@ _fly:
 	pop eax
 	popfd
 	ret
+
+; init xsave if needed
+; edi -> tdata
+; free tu use: eax, edx
+;
+init_xsave:
+	mov edx, [esi+tdata_cpu_cr4]
+	mov eax, cr4
+	or  eax, edx
+	mov cr4, eax
+	bt  eax, 18 ; osxsave
+	jnc skip_xsave_set
+		push ecx
+		xor ecx, ecx
+		xgetbv
+		or eax, 7 ; AVX, SSE, X87 bits
+		xsetbv
+		pop ecx
+	skip_xsave_set:
+		ret
 
 	;;; PAD
 	rb fn_block_size - $ + _fly

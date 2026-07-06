@@ -26,7 +26,7 @@ BIN=smp.vxd
 TOOLS=fixlink.exe generator.exe
 
 SMP_VXD_OBJS=smp.wcc.obj vxd_lib.wcc.obj vxd_debug.wcc.obj smp_init.wcc.obj smp_proc.wcc.obj \
-  vxd_terror.wcc.obj taskswitch.wcc.obj paging.wcc.obj
+  vxd_terror.wcc.obj taskswitch.wcc.obj paging.wcc.obj cpuid.wcc.obj
 
 SMP9X_OBJS=smp9x.gcc.o
 
