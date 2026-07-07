@@ -438,8 +438,12 @@ BOOL smp_init()
 						ttable[apid].data->cpu_cr3 = phy + P_SIZE;
 						ttable[apid].data->pd = (uint32_t*)(((uint8_t*)mem) + P_SIZE);
 
-						ttable[apid].data->cpu_cr4 = (1 << 9); // OSFXSR
-						ttable[apid].data->xsaveflags = 0; // using fxsave
+						ttable[apid].data->cpu_cr4 = (1 << 9) | (1 << 10); // OSFXSR + OSXMMEXCP
+						ttable[apid].data->xsaveflags = xsave_flags; // using fxsave
+						if(xsave_flags != 0)
+						{
+							ttable[apid].data->cpu_cr4 |= (1 << 18); // OSXSAVE
+						}
 
 						ttable[apid].data->index = ap_count+1;
 

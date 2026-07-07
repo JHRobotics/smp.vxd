@@ -69,7 +69,7 @@ tdata_gdt        equ 32
 tdata_init_state equ 160
 tdata_proc_state equ 288
 tdata_proc_tss   equ 416
-tdata_fpu_state  equ 544
+tdata_fpu_state  equ 576
 
 ; AP state
 S_BUSY    equ 0
@@ -343,7 +343,7 @@ switch_back:
 	test eax, eax
 	jz use_fxsave
 		xor edx,edx
-		xsavec [edi]
+		xsave [edi]
 		jmp fpu_saved
 	use_fxsave:
 		fxsave [edi]

@@ -704,6 +704,17 @@ ULONG __declspec(naked) __cdecl _PageAttach(ULONG page, PVOID hcontextsrc, ULONG
 	VMMJmp(_PageAttach);
 }
 
+DWORD GetCR0()
+{
+	DWORD val = 0;
+	_asm
+	{
+		mov eax, cr0
+		mov [val], eax
+	}
+	return val;
+}
+
 DWORD GetCR3()
 {
 	DWORD val = 0;

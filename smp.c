@@ -65,6 +65,58 @@ void Sys_Critical_Init_proc(){ }
 
 void __declspec(naked) timeout_entry();
 
+void enable_simd()
+{
+	DWORD vmm_ver = Get_VMM_Version();
+	dbg_printf("VMM ver: 0x%lX\n", vmm_ver);
+	if((cpu_flags.regs.regEDX & CPUID_EDX_FXSR) != 0)
+	{
+		if(vmm_ver < 0x40A)
+		{
+			no_sys_fxsave = TRUE;
+		}
+		
+		if((cpu_flags.regs.regECX & CPUID_ECX_XSAVE) != 0)
+		{
+			_asm
+			{
+				push ecx
+				push edx
+				mov eax, cr4
+				or  eax, 0x40600 /* OSFXSR(9) + OSXMMEXCPT(10) + OSXSAVE(18) */
+				mov cr4, eax
+				xor ecx, ecx
+				db 0x0F, 0x01, 0xD0 /*xgetbv*/
+				or eax, 0x7
+				db 0x0F, 0x01, 0xD1 /*xsetbv*/
+				pop edx
+				pop ecx
+			}
+			
+			/* reread CPUID when AVX is now avaible! */
+			cpuid(1, &cpu_flags);
+			if((cpu_flags.regs.regECX & CPUID_ECX_AVX) != 0)
+			{
+				xsave_flags = 0x7; /* FPU, XMM, AVX */
+				dbg_printf("AVX on!\n");
+			}
+			else
+			{
+				dbg_printf("XSAVE but no AVX!\n");
+			}
+		}
+		else
+		{
+			_asm
+			{
+				mov eax, cr4
+				or  eax, 0x600 /* OSFXSR(9) + OSXMMEXCPT(10) */
+				mov cr4, eax
+			}
+			dbg_printf("no AVX support!\n");
+		}
+	}
+}
 
 /* CommandTail: Address of the command tail retrieved from the program segment prefix (PSP) of VMM32.VXD. The first byte in the command tail specifies the length in bytes of the tail. 
 */
@@ -83,9 +135,14 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
  	if(cpuid_res.regs.regEAX >= 1)
  	{
  		cpuid(1, &cpu_flags);
+		enable_simd();
+		dbg_printf("CPUID(1) EBX=%X, ECX=%X EDX=%X\n",
+			cpu_flags.regs.regEBX,
+			cpu_flags.regs.regECX,
+			cpu_flags.regs.regEDX);
  	}
  	
- 	if((cpu_flags.regs.regEDX & CPUID_EDX_APIC) != 0)
+ 	if((cpu_flags.regs.regEDX & CPUID_EDX_HTT) != 0)
  	{
 	 	smp_first_mb = (uint8_t*)_MapPhysToLinear(0, 1048576, 0);
 		//alertf("Device_Init: %s\n", VXD_DDB.DDB_Name);
@@ -107,6 +164,10 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 			Set_Global_Time_Out(1000, NULL, timeout_entry);
 	#endif
 		}
+	}
+	else if(cpu_flags.regs.regEDX & CPUID_EDX_SSE)
+	{
+		ts_init();
 	}
 }
 

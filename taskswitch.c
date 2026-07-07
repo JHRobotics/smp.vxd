@@ -117,11 +117,31 @@ int switch_to_ap(PCRS_32 crs, DWORD thread_id);
 void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 {
 	ts_thread_t *ts;
+	DWORD orig_cr0 = GetCR0();
 	act_tid = cur_tid;
+	
+	if(orig_cr0 & 0x8)
+	{
+		_asm clts;
+	}
+
+	dbg_printf("TS: %X => %X ", cur_tid, old_tid);
 	
 	ts = ts_thread_get(old_tid);
 	if(ts)
 	{
+		if(fpu_need_extra_save())
+		{
+			TCB_t *cbs_old = (TCB_t*)old_tid;
+			if((cbs_old->TCB_Flags & THFLAG_RING0_THREAD) == 0)
+			{
+				dbg_printf(" S");
+				fpu_save(TRUE, ts->fpu_state);
+				ts->dirty = 0;
+				dbg_printf(".");
+			}
+		}
+		
 		if(ts->mode == SMP_MODE_AUTORUN && ts->smp_status == 0)
 		{
 			TCB_t *cbs = (TCB_t*)old_tid;
@@ -133,6 +153,35 @@ void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 				switch_to_ap(cbs->TCB_ClientPtr, old_tid);
 			}
 		}
+	}
+
+	if(fpu_need_extra_save())
+	{
+		TCB_t *cbs_new = (TCB_t*)cur_tid;
+		if((cbs_new->TCB_Flags & THFLAG_RING0_THREAD) == 0)
+		{
+			ts = ts_thread_get(cur_tid);
+			if(ts)
+			{
+				if(ts->dirty == 0)
+				{
+					dbg_printf(" R");
+					fpu_restore(TRUE, ts->fpu_state);
+					dbg_printf(".");
+				}
+			}
+		}
+	}
+	
+	dbg_printf("OK\n");
+	
+	if(orig_cr0 & 0x8)
+	{
+		_asm
+		{
+			mov eax, [orig_cr0]
+			mov cr0, eax
+		};
 	}
 	
 }
@@ -212,6 +261,7 @@ static int fpu_save_method(sys)
 void fpu_save(BOOL sys, uint8_t *dst)
 {
 	int m = fpu_save_method(sys);
+	dbg_printf("fpu_save, m=%d, CR0=%X CR4=%X\n", m, GetCR0(), GetCR4());
 	
 	switch(m)
 	{
@@ -234,7 +284,7 @@ void fpu_save(BOOL sys, uint8_t *dst)
 				mov edi, [dst]
 				mov eax, [xsave_flags]
 				xor edx,edx
-				db 0x0f,0xc7,0x27  /* xsavec [edi] */
+				db 0x0f,0xAE,0x27  /* xsave [edi] */
 				pop edi
 				pop edx
 			}
@@ -248,7 +298,7 @@ void fpu_save(BOOL sys, uint8_t *dst)
 				mov eax, [xsave_flags]
 				xor edx,edx
 				and eax, 0xFFFFFFFC
-				db 0x0f,0xc7,0x27  /* xsavec [edi] */
+				db 0x0f,0xAE,0x27  /* xsave [edi] */
 				pop edi
 				pop edx
 			}
@@ -281,6 +331,7 @@ void fpu_restore(BOOL sys, const uint8_t *src)
 				mov edi, [src]
 				mov eax, [xsave_flags]
 				xor edx,edx
+				wait
 				db 0x0F,0xAE,0x2F  /* xrstor [edi]*/
 				pop edi
 				pop edx
@@ -303,7 +354,7 @@ void fpu_restore(BOOL sys, const uint8_t *src)
 	}
 }
 
-BOOL fpu_need_extra_space()
+BOOL fpu_need_extra_save()
 {
 	if(fpu_save_method(TRUE) == SAVE_NOP)
 	{

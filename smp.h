@@ -121,8 +121,9 @@ typedef struct tdata
 	uint8_t  init_state[128];  // 160  -> tagCRS_32
 	uint8_t  proc_state[128];  // 288 -> tagCRS_32
 	uint32_t tss[32];          // 416 (size 104)
-	uint8_t  fpu_state[1024];  // 544
-} tdata_t;                   // size: 1568
+	uint8_t pad[32];           // 544
+	uint8_t  fpu_state[1024];  // 576
+} tdata_t;                   // size: 1600
 
 typedef struct titem
 {
@@ -176,6 +177,6 @@ extern BOOL no_sys_fxsave;
 
 void fpu_save(BOOL sys, uint8_t *dst);
 void fpu_restore(BOOL sys, const uint8_t *src);
-BOOL fpu_need_extra_space();
+BOOL fpu_need_extra_save();
 
 #endif /* __SMP_H__INCLUDED__ */

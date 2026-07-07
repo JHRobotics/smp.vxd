@@ -131,6 +131,7 @@ void FBHDA_unlock();
 void critical_section_enter();
 void critical_section_leave();
 
+DWORD GetCR0();
 DWORD GetCR3();
 DWORD GetCR4();
 void Call_When_Thread_Switched(DWORD entry);

@@ -35,6 +35,7 @@ typedef struct ts_thread
 	DWORD mode;               /* 32, switching type */
 	DWORD pad[7];             /* 36, pad to XSAVE area */
 	/* XSAVE */
+	uint8_t fpu_state[1024];
 } ts_thread_t;
 
 

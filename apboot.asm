@@ -77,11 +77,11 @@ ap_boot32:
 
 	; enable PG
 	mov    eax, cr0
-	or     eax, 0x80000000 ; PG
-	mov    cr0, eax
+	or     eax, 0x80000022 ; PG MP NE
+;	mov    cr0, eax
 
-	mov    eax, cr0
-	and    eax, 0xFFFEFFFF ; -WP
+;	mov    eax, cr0
+	and    eax, 0xFFFEFFFB ; -WP -EM
 	mov    cr0, eax
 
 ;
