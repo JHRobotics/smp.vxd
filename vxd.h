@@ -47,6 +47,6 @@
 #include "smp.h"
 #include "taskswitch.h"
 #include "smp9x.h"
-#include "cpuid.h"
+#include "cpuid_smp.h"
 
 #endif /* __VXD_H__INCLUDED__ */

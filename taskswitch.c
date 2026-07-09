@@ -120,12 +120,13 @@ void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 	DWORD orig_cr0 = GetCR0();
 	act_tid = cur_tid;
 	
+	/* if TS flag is set, we can't save/restore FPU/XMM/YMM state, so clear it */
 	if(orig_cr0 & 0x8)
 	{
 		_asm clts;
 	}
 
-	dbg_printf("TS: %X => %X ", cur_tid, old_tid);
+	//dbg_printf("TS: %X => %X ", cur_tid, old_tid);
 	
 	ts = ts_thread_get(old_tid);
 	if(ts)
@@ -135,10 +136,10 @@ void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 			TCB_t *cbs_old = (TCB_t*)old_tid;
 			if((cbs_old->TCB_Flags & THFLAG_RING0_THREAD) == 0)
 			{
-				dbg_printf(" S");
+				//dbg_printf(" S");
 				fpu_save(TRUE, ts->fpu_state);
 				ts->dirty = 0;
-				dbg_printf(".");
+				//dbg_printf(".");
 			}
 		}
 		
@@ -165,16 +166,17 @@ void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 			{
 				if(ts->dirty == 0)
 				{
-					dbg_printf(" R");
+					//dbg_printf(" R");
 					fpu_restore(TRUE, ts->fpu_state);
-					dbg_printf(".");
+					//dbg_printf(".");
 				}
 			}
 		}
 	}
 	
-	dbg_printf("OK\n");
+	//dbg_printf("OK\n");
 	
+	/* set back TS flag, not necessary in theory but i don't want to confuse os */
 	if(orig_cr0 & 0x8)
 	{
 		_asm
@@ -261,7 +263,7 @@ static int fpu_save_method(sys)
 void fpu_save(BOOL sys, uint8_t *dst)
 {
 	int m = fpu_save_method(sys);
-	dbg_printf("fpu_save, m=%d, CR0=%X CR4=%X\n", m, GetCR0(), GetCR4());
+	//dbg_printf("fpu_save, m=%d, CR0=%X CR4=%X\n", m, GetCR0(), GetCR4());
 	
 	switch(m)
 	{
@@ -331,7 +333,6 @@ void fpu_restore(BOOL sys, const uint8_t *src)
 				mov edi, [src]
 				mov eax, [xsave_flags]
 				xor edx,edx
-				wait
 				db 0x0F,0xAE,0x2F  /* xrstor [edi]*/
 				pop edi
 				pop edx

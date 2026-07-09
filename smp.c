@@ -56,6 +56,7 @@ DDB VXD_DDB = {
 DWORD ThisVM = 0;
 uint8_t *smp_first_mb = NULL;
 static BOOL smp_valid = FALSE;
+static BOOL smp_init_succ = FALSE;
 static cpuid_result_t cpu_flags;
 
 uint32_t xsave_flags = 0;
@@ -169,6 +170,8 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 	{
 		ts_init();
 	}
+	
+	smp_init_succ = TRUE;
 }
 
 void __stdcall Device_Dynamic_Init(DWORD vm)
@@ -195,7 +198,7 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 	switch(params->dwIoControlCode)
 	{
 		case DIOC_OPEN:
-			if(smp_valid)
+			if(smp_init_succ)
 			{
 				rc = 0;
 			}
@@ -215,6 +218,25 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 			smp_elevate(inBuf[0], inBuf[1], inBuf[2]);
 			rc = 0;
 			break;
+		case DIOC_SMP_CPU_FEATURES:
+		{
+			DWORD features = 0;
+			if((cpu_flags.regs.regEDX & CPUID_EDX_MMX) != 0)
+			{
+				features |= SMP_CPU_MMX;
+			}
+			if((cpu_flags.regs.regEDX & CPUID_EDX_SSE) != 0)
+			{
+				features |= SMP_CPU_SSE;
+			}
+			if(xsave_flags != 0)
+			{
+				features |= SMP_CPU_AVX;
+			}
+			outBuf[0] = features;
+			rc = 0;
+			break;
+		}
 		// all others
 	}
 	

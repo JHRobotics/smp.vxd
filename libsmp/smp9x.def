@@ -17,6 +17,7 @@
   TryEnterCriticalSection@4 = TryEnterCriticalSection9x
   InitializeCriticalSectionAndSpinCount@8 = InitializeCriticalSectionAndSpinCount9x
   memset = fast_memset
+  IsProcessorFeaturePresent@4 = smp9x_IsProcessorFeaturePresent
 ; InitOnceExecuteOnce = smp9x_InitOnceExecuteOnce
 ; InitializeConditionVariable = smp9x_InitializeConditionVariable
 ; WakeAllConditionVariable = smp9x_WakeAllConditionVariable

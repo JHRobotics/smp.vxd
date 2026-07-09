@@ -25,6 +25,7 @@
 #define DIOC_SMP_CPU_COUNT 2
 #define DIOC_SMP_GET_ADDRESS 3
 #define DIOC_SMP_ELEVATE 4
+#define DIOC_SMP_CPU_FEATURES 5
 
 #define SMP_OFFSET_IS_BSP     0x200
 #define SMP_OFFSET_CPUINDEX   0x280
@@ -40,13 +41,18 @@
 #define SMP_MODE_MANUAL  1
 #define SMP_MODE_AUTORUN 2
 
+#define SMP_CPU_MMX 1
+#define SMP_CPU_SSE 2
+#define SMP_CPU_AVX 3
+#define SMP_CPU_AVX512 4
+
 void __cdecl smp9x_init();
 void __cdecl smp9x_close();
 void __cdecl smp9x_thread_elevate(volatile DWORD *lock_ptr, int mode);
 void __cdecl smp9x_thread_fly();
 void __cdecl smp9x_thread_land();
 int  __cdecl smp9x_cpus();
-
+DWORD __cdecl smp9x_cpu_features();
 #define SMP_VXD "smp.vxd"
 
 #ifndef VXD_DEVICE_ID
