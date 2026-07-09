@@ -273,7 +273,7 @@ _switchtask:
 	test eax,eax
 	jz use_fxrstor
 		xor edx,edx
-		xrstor [esi]
+		xrstors [esi]
 		jmp fpu_loaded
 	use_fxrstor:
 		fxrstor [esi]
@@ -343,7 +343,7 @@ switch_back:
 	test eax, eax
 	jz use_fxsave
 		xor edx,edx
-		xsave [edi]
+		xsaves [edi]
 		jmp fpu_saved
 	use_fxsave:
 		fxsave [edi]

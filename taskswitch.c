@@ -36,7 +36,7 @@ DWORD ts_thread_tid()
 
 ts_thread_t *ts_thread_create(DWORD tid)
 {
-	ts_thread_t *ts = (ts_thread_t *)_PageAllocate(TS_THREAD_PAGES, PG_SYS, 0, 0x0, PAGE_ALLOC_MIN, PAGE_ALLOC_MAX, NULL, PAGEFIXED);
+	ts_thread_t *ts = (ts_thread_t *)_PageAllocate(TS_THREAD_PAGES, PG_SYS, 0, 0x0, PAGE_ALLOC_MIN, PAGE_ALLOC_MAX, NULL, PAGEFIXED|PAGEZEROINIT);
 	ts_thread_t **tindex;
 	DWORD hash;
 		
@@ -286,7 +286,8 @@ void fpu_save(BOOL sys, uint8_t *dst)
 				mov edi, [dst]
 				mov eax, [xsave_flags]
 				xor edx,edx
-				db 0x0f,0xAE,0x27  /* xsave [edi] */
+				;db 0x0f,0xAE,0x27  /* xsave [edi] */
+				db 0x0F, 0xC7, 0x2F /* xsaves [edi] */
 				pop edi
 				pop edx
 			}
@@ -300,7 +301,8 @@ void fpu_save(BOOL sys, uint8_t *dst)
 				mov eax, [xsave_flags]
 				xor edx,edx
 				and eax, 0xFFFFFFFC
-				db 0x0f,0xAE,0x27  /* xsave [edi] */
+				;db 0x0f,0xAE,0x27  /* xsave [edi] */
+				db 0x0F, 0xC7, 0x2F /* xsaves [edi] */
 				pop edi
 				pop edx
 			}
@@ -333,7 +335,8 @@ void fpu_restore(BOOL sys, const uint8_t *src)
 				mov edi, [src]
 				mov eax, [xsave_flags]
 				xor edx,edx
-				db 0x0F,0xAE,0x2F  /* xrstor [edi]*/
+				;db 0x0F,0xAE,0x2F  /* xrstor [edi]*/
+				db 0x0F, 0xC7, 0x1F /* xrstors [edi] */
 				pop edi
 				pop edx
 			}
@@ -347,7 +350,8 @@ void fpu_restore(BOOL sys, const uint8_t *src)
 				mov eax, [xsave_flags]
 				xor edx,edx
 				and eax, 0xFFFFFFFC
-				db 0x0F,0xAE,0x2F  /* xrstor [edi] */
+				;db 0x0F,0xAE,0x2F  /* xrstor [edi] */
+				db 0x0F, 0xC7, 0x1F /* xrstors [edi] */
 				pop edi
 				pop edx
 			}
