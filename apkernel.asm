@@ -273,7 +273,7 @@ _switchtask:
 	test eax,eax
 	jz use_fxrstor
 		xor edx,edx
-		xrstors [esi]
+		xrstor [esi]
 		jmp fpu_loaded
 	use_fxrstor:
 		fxrstor [esi]
@@ -343,7 +343,7 @@ switch_back:
 	test eax, eax
 	jz use_fxsave
 		xor edx,edx
-		xsaves [edi]
+		xsave [edi]
 		jmp fpu_saved
 	use_fxsave:
 		fxsave [edi]
@@ -429,16 +429,22 @@ _is_bsp:
 	
 	;;; PAD
 	rb (fn_block_size shr 1) - $ + _is_bsp
-	
+
+;
+; int __cdecl cpuindex()
+;
+; @return: index of current cpu, BSP is 0
+;
 _cpuindex:
 	push ebx
 	GetAPID
 	GetData ecx
-	cmp    ebx, [esi+(bsp_id-ap_data)]
-	jnz    not_bsp
-		mov  eax, eax
+	cmp    ebx, [ecx+(bsp_id-ap_data)]
+	jnz    index_not_bsp
+		xor eax, eax ; for BSP cpu index is 0
 		jmp cpuindex_done
 
+	index_not_bsp:
 	shl ebx,  3 ; ebx * 8
 	mov ecx, [ecx+(ttable-ap_data)]
 	add ecx,  ebx      ; table[apid]

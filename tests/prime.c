@@ -52,7 +52,7 @@ uint64_t sqrt64(uint64_t n)
 	uint64_t left = 0;
 	uint64_t right = n+1;
 	
-	while(left != right -1)
+	while(left != right - 1)
 	{
 		uint64_t midpoint = (left + right) / 2;
 		if(midpoint > 0xFFFFFFFFULL) /* overflow check */

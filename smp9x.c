@@ -340,7 +340,7 @@ DWORD WINAPI smp9x_GetCurrentProcessorNumber()
 	if(smp9x_address != 0)
 	{
 		smp9x_cpuindex_t cpuindex = (smp9x_cpuindex_t)(smp9x_address + SMP_OFFSET_CPUINDEX);
-		return cpuindex()+1;
+		return cpuindex();
 	}
 	
 	if(gcpn != NULL)
@@ -348,7 +348,7 @@ DWORD WINAPI smp9x_GetCurrentProcessorNumber()
 		return gcpn();
 	}
 	
-	return 1;
+	return 0;
 }
 
 typedef struct _cpuid_leaf_t
@@ -373,7 +373,13 @@ BOOL WINAPI IsProcessorFeaturePresentCPUID(DWORD ProcessorFeature)
 	__get_cpuid(0x00000001,  &leaf1.r_eax,  &leaf1.r_ebx,  &leaf1.r_ecx,  &leaf1.r_edx);
 	__get_cpuid(0x00000007,  &leaf7.r_eax,  &leaf7.r_ebx,  &leaf7.r_ecx,  &leaf7.r_edx);
 	__get_cpuid(0x80000001, &leaf81.r_eax, &leaf81.r_ebx, &leaf81.r_ecx, &leaf81.r_edx);
-	
+
+#if 0
+	printf("Leaf 1: %X %X %X %X\n", leaf1.r_eax,  leaf1.r_ebx,  leaf1.r_ecx,  leaf1.r_edx);
+	printf("Leaf 7: %X %X %X %X\n", leaf7.r_eax,  leaf7.r_ebx,  leaf7.r_ecx,  leaf7.r_edx);
+	printf("Leaf 8: %X %X %X %X\n", leaf81.r_eax, leaf81.r_ebx, leaf81.r_ecx, leaf81.r_edx);
+#endif
+
 	switch(ProcessorFeature)
 	{
 		case PF_FLOATING_POINT_PRECISION_ERRATA:  return FALSE;
@@ -431,15 +437,15 @@ BOOL WINAPI IsProcessorFeaturePresentCPUID(DWORD ProcessorFeature)
 
 BOOL WINAPI smp9x_IsProcessorFeaturePresent(DWORD ProcessorFeature)
 {
-	if(cpu_features || ipfp == NULL)
+	DWORD dwVersion, dwMajorVersion, dwMinorVersion;
+  dwVersion = GetVersion();
+
+  dwMajorVersion = (DWORD)(LOBYTE(LOWORD(dwVersion)));
+  dwMinorVersion = (DWORD)(HIBYTE(LOWORD(dwVersion)));
+	
+	if(dwMajorVersion == 4 || cpu_features || ipfp == NULL)
 	{
-		DWORD dwVersion, dwMajorVersion, dwMinorVersion;
-		BOOL test = IsProcessorFeaturePresentCPUID(ProcessorFeature);
-    dwVersion = GetVersion();
- 
-    dwMajorVersion = (DWORD)(LOBYTE(LOWORD(dwVersion)));
-    dwMinorVersion = (DWORD)(HIBYTE(LOWORD(dwVersion)));
-    
+		BOOL test = IsProcessorFeaturePresentCPUID(ProcessorFeature);    
     if(dwMajorVersion == 4)
     {
     	/* Win95 */
