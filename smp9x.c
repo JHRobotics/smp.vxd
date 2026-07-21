@@ -351,89 +351,7 @@ DWORD WINAPI smp9x_GetCurrentProcessorNumber()
 	return 0;
 }
 
-typedef struct _cpuid_leaf_t
-{
-	uint32_t r_eax;
-	uint32_t r_ebx;
-	uint32_t r_ecx;
-	uint32_t r_edx;
-} cpuid_leaf_t;
-
-
-#define FCHECK(_leaf, _reg, _f) if(_leaf.r_ ## _reg & _f) return TRUE;
-
-BOOL WINAPI IsProcessorFeaturePresentCPUID(DWORD ProcessorFeature)
-{
-	cpuid_leaf_t leaf1, leaf7, leaf81;
-
-  memset(&leaf1, 0, sizeof(cpuid_leaf_t));
-  memset(&leaf7, 0, sizeof(cpuid_leaf_t));
-  memset(&leaf81, 0, sizeof(cpuid_leaf_t));
-
-	__get_cpuid(0x00000001,  &leaf1.r_eax,  &leaf1.r_ebx,  &leaf1.r_ecx,  &leaf1.r_edx);
-	__get_cpuid(0x00000007,  &leaf7.r_eax,  &leaf7.r_ebx,  &leaf7.r_ecx,  &leaf7.r_edx);
-	__get_cpuid(0x80000001, &leaf81.r_eax, &leaf81.r_ebx, &leaf81.r_ecx, &leaf81.r_edx);
-
-#if 0
-	printf("Leaf 1: %X %X %X %X\n", leaf1.r_eax,  leaf1.r_ebx,  leaf1.r_ecx,  leaf1.r_edx);
-	printf("Leaf 7: %X %X %X %X\n", leaf7.r_eax,  leaf7.r_ebx,  leaf7.r_ecx,  leaf7.r_edx);
-	printf("Leaf 8: %X %X %X %X\n", leaf81.r_eax, leaf81.r_ebx, leaf81.r_ecx, leaf81.r_edx);
-#endif
-
-	switch(ProcessorFeature)
-	{
-		case PF_FLOATING_POINT_PRECISION_ERRATA:  return FALSE;
-		case PF_FLOATING_POINT_EMULATED:          return FALSE;
-		case PF_COMPARE_EXCHANGE_DOUBLE:          FCHECK(leaf1,  edx, CPUID_EDX_MCE);   break;
-		case PF_MMX_INSTRUCTIONS_AVAILABLE:       FCHECK(leaf1,  edx, CPUID_EDX_MMX);   break;
-		case PF_XMMI_INSTRUCTIONS_AVAILABLE:      FCHECK(leaf1,  edx, CPUID_EDX_SSE);   break;
-		case PF_3DNOW_INSTRUCTIONS_AVAILABLE:     FCHECK(leaf81, edx, CPUID_EDX_3DNOW); break;
-		case PF_RDTSC_INSTRUCTION_AVAILABLE:      FCHECK(leaf1,  edx, CPUID_EDX_TSC);   break;
-		case PF_PAE_ENABLED:                      return FALSE; /* in theory on 2000 server, but assume no */
-		case PF_XMMI64_INSTRUCTIONS_AVAILABLE:    FCHECK(leaf1,  edx, CPUID_EDX_SSE2);  break;
-		case PF_NX_ENABLED:                       return FALSE; /* not supported until XP SP2 */
-		case PF_SSE3_INSTRUCTIONS_AVAILABLE:      FCHECK(leaf81, edx, CPUID_ECX_SSE3);  break;
-		case PF_COMPARE_EXCHANGE128:              FCHECK(leaf1,  ecx, CPUID_ECX_CMPXCHG16B); break;
-		case PF_COMPARE64_EXCHANGE128:            FCHECK(leaf1,  ecx, CPUID_ECX_CMPXCHG16B); break;
-		case PF_CHANNELS_ENABLED:                 return TRUE; /* ? */
-		case PF_XSAVE_ENABLED:                    FCHECK(leaf1,  ecx, CPUID_ECX_OSXSAVE); break;
-		case PF_SECOND_LEVEL_ADDRESS_TRANSLATION: return TRUE;
-		case PF_VIRT_FIRMWARE_ENABLED:            FCHECK(leaf1,  ecx, CPUID_ECX_VMX); break;
-		case PF_RDWRFSGSBASE_AVAILABLE:           return FALSE; /* only in 64b mode */
-		case PF_FASTFAIL_AVAILABLE:               return FALSE;
-		case PF_RDRAND_INSTRUCTION_AVAILABLE:     FCHECK(leaf1,  ecx, CPUID_ECX_RDRAND);   break;
-		case PF_RDTSCP_INSTRUCTION_AVAILABLE:     FCHECK(leaf81, edx, CPUID_EDX_RDTSCP);   break;
-		case PF_RDPID_INSTRUCTION_AVAILABLE:      FCHECK(leaf7,  ecx, CPUID_ECX_RDPID);    break;
-		
-		case PF_MONITORX_INSTRUCTION_AVAILABLE:   FCHECK(leaf81, ecx, CPUID_ECX_MONITORX); break;
-		case PF_SSSE3_INSTRUCTIONS_AVAILABLE:     FCHECK(leaf1,  ecx, CPUID_ECX_SSSE3);    break;
-		case PF_SSE4_1_INSTRUCTIONS_AVAILABLE:    FCHECK(leaf1,  ecx, CPUID_ECX_SSE4_1);   break;
-		case PF_SSE4_2_INSTRUCTIONS_AVAILABLE:    FCHECK(leaf1,  ecx, CPUID_ECX_SSE4_2);   break;
-		case PF_AVX_INSTRUCTIONS_AVAILABLE:       FCHECK(leaf1,  ecx, CPUID_ECX_AVX);      break;
-		case PF_AVX2_INSTRUCTIONS_AVAILABLE:      FCHECK(leaf7,  ebx, CPUID_EBX_AVX2);     break;
-		case PF_AVX512F_INSTRUCTIONS_AVAILABLE:   FCHECK(leaf7,  ebx, CPUID_EBX_AVX512_F); break;
-
-		/* NON x86 */
-		case PF_PPC_MOVEMEM_64BIT_OK:
-		case PF_ALPHA_BYTE_INSTRUCTIONS:
-		case PF_ERMS_AVAILABLE:
-		case PF_ARM_VFP_32_REGISTERS_AVAILABLE:
-		case PF_ARM_NEON_INSTRUCTIONS_AVAILABLE:
-		case PF_ARM_DIVIDE_INSTRUCTION_AVAILABLE:
-		case PF_ARM_64BIT_LOADSTORE_ATOMIC:
-		case PF_ARM_EXTERNAL_CACHE_AVAILABLE:
-		case PF_ARM_FMAC_INSTRUCTIONS_AVAILABLE:
-		case PF_ARM_V8_INSTRUCTIONS_AVAILABLE:
-		case PF_ARM_V8_CRYPTO_INSTRUCTIONS_AVAILABLE:
-		case PF_ARM_V8_CRC32_INSTRUCTIONS_AVAILABLE:
-		case PF_ARM_V81_ATOMIC_INSTRUCTIONS_AVAILABLE:
-		case PF_ARM_V82_DP_INSTRUCTIONS_AVAILABLE:
-		case PF_ARM_V83_JSCVT_INSTRUCTIONS_AVAILABLE:
-			break;
-	}
-	
-	return FALSE;
-}
+#include "ipfp.h"
 
 BOOL WINAPI smp9x_IsProcessorFeaturePresent(DWORD ProcessorFeature)
 {
@@ -634,4 +552,44 @@ void __cdecl smp9x__endthread(void)
 void __cdecl smp9x__endthreadex(unsigned _Retval)
 {
 	smp9x_ExitThread(_Retval);
+}
+
+/**
+ * Stat and performance informations
+ * @param type: SMP_STAT_CPU
+ * @param unit: cpu index (from 0, to smp9x_cpus())
+ *
+ * @return: FALSE when smp.vxd is not loaded
+ *
+ **/
+BOOL __cdecl smp9x_stats(int type, int unit, DWORD *ret)
+{
+	BOOL rc = FALSE;
+	DWORD result = 0;
+	if(smp_vxd == INVALID_HANDLE_VALUE)
+	{
+		return FALSE;
+	}
+	
+	switch(type)
+	{
+		case SMP_STAT_CPU:
+		{
+			DWORD dw_unit = unit;
+			if(DeviceIoControl(smp_vxd, DIOC_SMP_CPU_STATS, &dw_unit, sizeof(DWORD), &result, sizeof(DWORD), NULL, NULL))
+			{
+				rc = TRUE;
+			}
+			break;
+		}
+	}
+	
+	if(rc)
+	{
+		if(ret != NULL)
+		{
+			*ret = result;
+		}
+	}
+	return rc;
 }

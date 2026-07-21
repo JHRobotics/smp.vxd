@@ -21,13 +21,27 @@
  ******************************************************************************/
 #include "vxd.h"
 
-void cpuid(int page, cpuid_result_t *result)
+int cpuid(int page, cpuid_result_t *result)
 {
+	int rc = 0;
 	_asm
 	{
+    pushfd
+    pushfd
+    xor dword ptr [esp],0x00200000
+    popfd
+    pushfd
+    pop eax
+    xor eax,[esp]
+    popfd
+    and eax,0x00200000
+    jz nocpuid
+		mov [rc], 1
+		
 		push ebx
 		push edi
 		mov eax, [page]
+		xor ecx, ecx
 		cpuid
 		mov edi, [result]
 		mov [edi   ], eax
@@ -36,6 +50,10 @@ void cpuid(int page, cpuid_result_t *result)
 		mov [edi+12], edx
 		pop edi
 		pop ebx
+		
+		nocpuid:
 	};
+	
+	return rc;
 }
 

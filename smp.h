@@ -121,7 +121,8 @@ typedef struct tdata
 	uint8_t  init_state[128];  // 160  -> tagCRS_32
 	uint8_t  proc_state[128];  // 288 -> tagCRS_32
 	uint32_t tss[32];          // 416 (size 104)
-	uint8_t pad[32];           // 544
+	uint32_t stats_usage;      // 544
+	uint8_t pad[28];           // 548
 	uint8_t  fpu_state[1024];  // 576
 } tdata_t;                   // size: 1600
 

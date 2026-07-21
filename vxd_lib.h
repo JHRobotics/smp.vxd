@@ -19,6 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER        *
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************/
+#ifndef __VXD_LIB_H__INCLUDED__
+#define __VXD_LIB_H__INCLUDED__
 
 /* 32 bit RING-0 system calls and CRT function */
 
@@ -139,3 +141,9 @@ DWORD Hook_PM_Fault(BYTE exception, DWORD pm_fault_callback);
 void Unhook_PM_Fault(BYTE exception, DWORD pm_fault_callback);
 BOOL Hook_Invalid_Page_Fault(DWORD pf_callback);
 void Unhook_Invalid_Page_Fault(DWORD pf_callback);
+
+const char *Get_Profile_String(const char *profile, const char *keyname, const char *default_str);
+BOOL Get_Profile_Boolean(const char *profile, const char *keyname, BOOL default_value);
+int Get_Profile_Decimal_Int(const char *profile, const char *keyname, int default_value);
+
+#endif /* __VXD_LIB_H__INCLUDED__ */

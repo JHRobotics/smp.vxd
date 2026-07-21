@@ -32,9 +32,10 @@ typedef union cpuid_result
 		uint32_t regEDX;
 	} regs;
 	uint32_t raw[4];
+	uint8_t bytes[16];
 } cpuid_result_t;
 
-void cpuid(int page, cpuid_result_t *result);
+int cpuid(int page, cpuid_result_t *result);
 
 /* leaf 0x01 */
 

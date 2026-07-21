@@ -1,19 +1,77 @@
 # SMP.vxd
 
-Symmetric multiprocessor driver for Windows 9x (95/98/Me). This driver allow to utilize multi-core CPU under these ancient operation systems.
+Symmetric multiprocessor driver for Windows 9x (95/98/Me). This driver allow to utilize multi-core CPU under these ancient operation systems. Also utilize AVX and SSE instruction set.
 
 ## UNDER DEVELOPMENT
 
 This is concept, expect large stability and performance issues.
 
 Currently tested devices:
-- VirtualBox (7.2.2)
+- VirtualBox (7.2.2 - 7.2.12)
 - VMware Workstation (7.5.2)
 - Gigabyte GA-G41M-ES2H + Intel Xeon X5460
 
 ## Important notice
 
 This isn't magic trick how increase performance on legacy games but allow you to write new application or modify open-source older things to use multi-thread/multi-core/multi-cpu performance.
+
+## Features
+
+<table>
+<thead>
+<tr>
+<td rowspan="2">Feature</td>
+<td colspan="2">native</td>
+<td colspan="2">smp.vxd loaded</td>
+</tr>
+<tr>
+<td>Windows 95</td>
+<td>Windows 98/Me</td>
+<td>kernel32.dll (95, 98, Me)</td>
+<td>libsmp.dll (95, 98, Me)</td>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Max. CPUs</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td><strong>256</strong></td>
+<tr>
+<td>x87/MMX</td>
+<td><strong>YES</strong></td>
+<td><strong>YES</strong></td>
+<td><strong>YES</strong></td>
+<td><strong>YES</strong></td>
+</tr>
+<tr>
+<td>SSE</td>
+<td>NO</td>
+<td><strong>YES</strong></td>
+<td><strong>YES</strong></td>
+<td><strong>YES</strong></td>
+</tr>
+<tr>
+<td>AVX</td>
+<td>NO</td>
+<td>NO</td>
+<td><strong>YES</strong></td>
+<td><strong>YES</strong></td>
+</tr>
+<tr>
+<td>AVX512</td>
+<td>NO</td>
+<td>NO</td>
+<td>NO</td>
+<td>NO</td>
+</tr>
+</tbody>
+</table>
+
+*Note to SSE/AVX: SMP.vxd implement thread context switch (though FXSAVE/XSAVE instructions), in contrast with older methods (like my [SIMD95](https://github.com/JHRobotics/simd95)) is save to using these instructions by multiple applications or in one application in multiple threads.*
+
+*Note to AVX512: support could be relatively easy added, but currently I don't have got any system for testing/debugging a no application that can utilize it.*
 
 ## Usage
 
@@ -26,6 +84,30 @@ device=smp.vxd
 ```
 
 And reboot computer. After boot you cant run `smpload.exe` to check if driver is loaded and number of CPUs.
+
+### Configuration
+
+Driver can be configured though `[smp]` section in `system.ini` (you have to create it).
+
+```
+[smp]
+
+; disable print information on startup
+quiet=1
+
+; disable AVX support (when CPU support it)
+noavx=1
+
+; disable SSE support on Windows 95 (Windows 98+ supports it natively)
+nosse=1
+
+; limit number of CPUs, when set to 1, disable SMP feature
+; useful when you want use AVX but not SMP
+maxcpus=2
+
+; wait to enter after module loads
+pause=1
+```
 
 ### Uninstallation
 

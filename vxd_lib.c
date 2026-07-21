@@ -814,4 +814,76 @@ void Unhook_Invalid_Page_Fault(DWORD pf_callback)
 	};
 }
 
+const char *Get_Profile_String(const char *profile, const char *keyname, const char *default_str)
+{
+	const char *result = default_str;
+	_asm
+	{
+		push esi
+		push edi
+		mov edx, [default_str]
+		mov esi, [profile]
+		mov edi, [keyname]
+	}
+	VMMCall(Get_Profile_String);
+	_asm
+	{
+		jc string_not_found
+			mov [result], edx
+		string_not_found:
+		pop edi
+		pop esi
+	}
+	
+	return result;
+}
 
+BOOL Get_Profile_Boolean(const char *profile, const char *keyname, BOOL default_value)
+{
+	BOOL result = default_value;
+	_asm
+	{
+		push esi
+		push edi
+		mov eax, [default_value]
+		mov esi, [profile]
+		mov edi, [keyname]
+	}
+	VMMCall(Get_Profile_Boolean);
+	_asm
+	{
+		jc bool_not_found
+		jz bool_not_found ; no value
+			mov [result], eax
+		bool_not_found:
+		pop edi
+		pop esi
+	}
+	
+	return result;
+}
+
+int Get_Profile_Decimal_Int(const char *profile, const char *keyname, int default_value)
+{
+	int result = default_value;
+	_asm
+	{
+		push esi
+		push edi
+		mov eax, [default_value]
+		mov esi, [profile]
+		mov edi, [keyname]
+	}
+	VMMCall(Get_Profile_Decimal_Int);
+	_asm
+	{
+		jc dec_not_found
+		jz dec_not_found ; no value
+			mov [result], eax
+		dec_not_found:
+		pop edi
+		pop esi
+	}
+	
+	return result;
+}

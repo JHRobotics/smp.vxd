@@ -5,6 +5,7 @@
 	smp9x_thread_fly
 	smp9x_thread_land
 	smp9x_cpus
+	smp9x_stats
   CreateThread@24 = smp9x_CreateThread
   ExitThread@4 = smp9x_ExitThread
   GetSystemInfo@4 = smp9x_GetSystemInfo

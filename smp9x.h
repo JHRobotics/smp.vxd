@@ -26,6 +26,7 @@
 #define DIOC_SMP_GET_ADDRESS 3
 #define DIOC_SMP_ELEVATE 4
 #define DIOC_SMP_CPU_FEATURES 5
+#define DIOC_SMP_CPU_STATS 6
 
 #define SMP_OFFSET_IS_BSP     0x200
 #define SMP_OFFSET_CPUINDEX   0x280
@@ -41,24 +42,36 @@
 #define SMP_MODE_MANUAL  1
 #define SMP_MODE_AUTORUN 2
 
-#define SMP_CPU_MMX 1
-#define SMP_CPU_SSE 2
-#define SMP_CPU_AVX 3
-#define SMP_CPU_AVX512 4
-
 void __cdecl smp9x_init();
 void __cdecl smp9x_close();
 void __cdecl smp9x_thread_elevate(volatile DWORD *lock_ptr, int mode);
 void __cdecl smp9x_thread_fly();
 void __cdecl smp9x_thread_land();
 int  __cdecl smp9x_cpus();
-DWORD __cdecl smp9x_cpu_features();
+
+#define SMP_CPU_SMPVXD      0x01 /* smp.vxd is present and loaded */
+#define SMP_CPU_SMPVXD_HTT  0x02 /* smp.vxd multi-cpu present and working */
+#define SMP_CPU_MMX         0x04 /* CPU and OS supports MMX */
+#define SMP_CPU_SSE         0x08 /* CPU and OS supports SSE */
+#define SMP_CPU_AVX         0x10 /* CPU and OS supports AVX */
+#define SMP_CPU_AVX512      0x20 /* CPU ans OS supports AVX512 */
+
+#define SMP_STAT_CPU 0
+#define SMP_STAT_APIC_ID 1
+#define SMP_STAT_THREADS 2
+
+BOOL __cdecl smp9x_stats(int type, int unit, DWORD *ret);
+typedef BOOL (__cdecl *smp9x_stats_t)(int type, int unit, DWORD *ret);
+
 #define SMP_VXD "smp.vxd"
+#define SMP_DLL "libsmp.dll"
 
 #ifndef VXD_DEVICE_ID
 
 /* WINAPI replacements */
 VOID WINAPI smp9x_GetSystemInfo(LPSYSTEM_INFO lpSystemInfo);
+typedef int (WINAPI *smp9x_GetSystemInfo_t)(LPSYSTEM_INFO lpSystemInfo);
+
 HANDLE WINAPI smp9x_CreateThread(
 	LPSECURITY_ATTRIBUTES   lpThreadAttributes,
 	SIZE_T                  dwStackSize,
@@ -66,7 +79,10 @@ HANDLE WINAPI smp9x_CreateThread(
   LPVOID                  pParameter,
   DWORD                   dwCreationFlags,
   LPDWORD                 lpThreadId);
+
 DWORD WINAPI smp9x_GetCurrentProcessorNumber();
+BOOL WINAPI smp9x_IsProcessorFeaturePresent(DWORD ProcessorFeature);
+typedef BOOL (WINAPI *smp9x_IsProcessorFeaturePresent_t)(DWORD ProcessorFeature);
 
 #endif
 

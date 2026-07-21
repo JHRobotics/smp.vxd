@@ -62,9 +62,19 @@ static cpuid_result_t cpu_flags;
 uint32_t xsave_flags = 0;
 BOOL no_sys_fxsave = FALSE;
 
+/* settings */
+BOOL noavx = FALSE;
+BOOL nosse = FALSE;
+BOOL quiet = FALSE;
+BOOL sys_pause = FALSE;
+int  max_cpus = 256;
+
 void Sys_Critical_Init_proc(){ }
 
 void __declspec(naked) timeout_entry();
+void __declspec(naked) monitor_entry();
+
+#define AP_MONITOR_TIMEOUT 125
 
 void enable_simd()
 {
@@ -77,7 +87,7 @@ void enable_simd()
 			no_sys_fxsave = TRUE;
 		}
 		
-		if((cpu_flags.regs.regECX & CPUID_ECX_XSAVE) != 0)
+		if((cpu_flags.regs.regECX & CPUID_ECX_XSAVE) != 0 && !noavx)
 		{
 			_asm
 			{
@@ -108,11 +118,14 @@ void enable_simd()
 		}
 		else
 		{
-			_asm
+			if(!nosse)
 			{
-				mov eax, cr4
-				or  eax, 0x600 /* OSFXSR(9) + OSXMMEXCPT(10) */
-				mov cr4, eax
+				_asm
+				{
+					mov eax, cr4
+					or  eax, 0x600 /* OSFXSR(9) + OSXMMEXCPT(10) */
+					mov cr4, eax
+				}
 			}
 			dbg_printf("no AVX support!\n");
 		}
@@ -131,8 +144,31 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 	VMMCall(_Allocate_Device_CB_Area);
  	ThisVM = vm;
  	
+ 	sys_pause = Get_Profile_Boolean(VXD_PROFILE, "pause", sys_pause);
+ 	noavx = Get_Profile_Boolean(VXD_PROFILE, "noavx", noavx);
+ 	nosse = Get_Profile_Boolean(VXD_PROFILE, "nosse", nosse);
+ 	quiet = Get_Profile_Boolean(VXD_PROFILE, "quiet", quiet);
+ 	max_cpus = Get_Profile_Decimal_Int(VXD_PROFILE, "maxcpus", max_cpus);
+ 	
+ 	if(nosse)
+ 	{
+ 		noavx = TRUE;
+ 	}
+ 	
+ 	dbg_printf("Settings: pause=%d noavx=%d nosse=%d quiet=%d max_cpus=%d\n",
+ 		sys_pause, noavx, nosse, quiet, max_cpus
+ 	);
+ 	
  	memset(&cpu_flags, 0, sizeof(cpuid_result_t));
- 	cpuid(0, &cpuid_res);
+ 	if(cpuid(0, &cpuid_res) == 0)
+ 	{
+ 		if(!quiet)
+ 		{
+ 			alertf(VXD_DEVICE_NAME ": CPUID not supported! Sorry.\n");
+ 		}
+ 		return;
+ 	}
+ 	
  	if(cpuid_res.regs.regEAX >= 1)
  	{
  		cpuid(1, &cpu_flags);
@@ -143,7 +179,7 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 			cpu_flags.regs.regEDX);
  	}
  	
- 	if((cpu_flags.regs.regEDX & CPUID_EDX_HTT) != 0)
+ 	if(((cpu_flags.regs.regEDX & CPUID_EDX_HTT) != 0) && max_cpus > 1)
  	{
 	 	smp_first_mb = (uint8_t*)_MapPhysToLinear(0, 1048576, 0);
 		//alertf("Device_Init: %s\n", VXD_DDB.DDB_Name);
@@ -155,20 +191,89 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 		{
 			smp_switch_install();
 			smp_valid = TRUE;
-			alertf("SMP driver init success, CPUs=%d\n", cpu_count);
-			
-	
+
 			tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
 				sizeof(tdata_t), sizeof(CRS_32));
 				
 	#ifdef DEBUG
 			Set_Global_Time_Out(1000, NULL, timeout_entry);
 	#endif
+			Set_Global_Time_Out(AP_MONITOR_TIMEOUT, NULL, monitor_entry);
 		}
 	}
 	else if(cpu_flags.regs.regEDX & CPUID_EDX_SSE)
 	{
 		ts_init();
+	}
+	
+	/* print info for user */
+	if(!quiet)
+	{
+		if(smp_valid)
+		{
+			alertf(VXD_DEVICE_NAME ": multi-CPU system, CPUs=%d", cpu_count);
+		}
+		else
+		{
+			alertf(VXD_DEVICE_NAME ": single-CPU system");
+		}
+		
+		if((cpu_flags.regs.regEDX & CPUID_EDX_FPU) != 0){alertf(", x87");}
+		if((cpu_flags.regs.regEDX & CPUID_EDX_MMX) != 0){alertf(", MMX");}
+		if((cpu_flags.regs.regEDX & CPUID_EDX_SSE) != 0)
+		{
+			if((cpu_flags.regs.regECX & CPUID_ECX_SSE4_2) != 0)
+			{
+				alertf(", SSE4.2");
+			}
+			else if((cpu_flags.regs.regECX & CPUID_ECX_SSE4_1) != 0)
+			{
+				alertf(", SSE4.1");
+			}
+			else if((cpu_flags.regs.regECX & (CPUID_ECX_SSE3 | CPUID_ECX_SSSE3)) != 0)
+			{
+				if((cpu_flags.regs.regECX & (CPUID_ECX_SSE3 | CPUID_ECX_SSSE3)) == (CPUID_ECX_SSE3 | CPUID_ECX_SSSE3))
+				{
+					alertf(", SSE3+SSSE3");
+				}
+				else if((cpu_flags.regs.regECX & CPUID_ECX_SSE3) != 0)
+				{
+					alertf(", SSE3");
+				}
+				else
+				{
+					alertf(", SSSE3");
+				}
+			}
+			else if((cpu_flags.regs.regEDX & CPUID_EDX_SSE2) != 0)
+			{
+				alertf(", SSE2");
+			}
+			else
+			{
+				alertf(", SSE");
+			}
+		}
+		if(xsave_flags != 0)
+		{
+			if((cpu_flags.regs.regECX & CPUID_ECX_AVX) != 0)
+			{
+				cpuid(7, &cpuid_res);
+				if((cpuid_res.regs.regEBX & CPUID_EBX_AVX2))
+				{
+					alertf(", AVX2");
+				}
+				else
+				{
+					alertf(", AVX");
+				}
+			}
+		}
+		alertf("\n");
+	} // quiet
+	if(sys_pause)
+	{
+		tpause();
 	}
 	
 	smp_init_succ = TRUE;
@@ -185,6 +290,52 @@ void __stdcall Device_Dynamic_Init(DWORD vm)
 void __stdcall Device_Dynamic_Exit(DWORD vm)
 {
 	dbg_printf("Device_Dynamic_Exit\n");
+}
+
+static DWORD ap_usage(DWORD stats)
+{
+	DWORD r = 0;
+	int i;
+	for(i = 0; i < 20; i++)
+	{
+		if((stats & 0x1) == 1)
+		{
+			r += 5;
+		}
+		stats >>= 1;
+	}
+	return r;
+}
+
+static DWORD bsp_usage()
+{
+	DWORD result = 0xFFFFFFFFFF;
+	DWORD hKey;
+	if(_RegOpenKey(HKEY_DYN_DATA, "PerfStats\\StartStat", &hKey) == ERROR_SUCCESS)
+	{
+		DWORD type;
+		DWORD cbData = 4;
+		DWORD data;
+		if(_RegQueryValueEx(hKey, "KERNEL\\CPUUsage", 0, &type, (char*)&data, &cbData) != ERROR_SUCCESS)
+		{
+			/* error */
+			return result;
+		}
+		_RegCloseKey(hKey);
+	}
+	
+	if(_RegOpenKey(HKEY_DYN_DATA, "PerfStats\\StatData", &hKey) == ERROR_SUCCESS)
+	{
+		DWORD type;
+		DWORD cbData = 4;
+		DWORD data;
+		if(_RegQueryValueEx(hKey, "KERNEL\\CPUUsage", 0, &type, (char*)&data, &cbData) == ERROR_SUCCESS)
+		{
+			result = data;
+		}
+		_RegCloseKey(hKey);
+	}
+	return result;
 }
 
 DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
@@ -220,7 +371,7 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 			break;
 		case DIOC_SMP_CPU_FEATURES:
 		{
-			DWORD features = 0;
+			DWORD features = SMP_CPU_SMPVXD;
 			if((cpu_flags.regs.regEDX & CPUID_EDX_MMX) != 0)
 			{
 				features |= SMP_CPU_MMX;
@@ -235,6 +386,29 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 			}
 			outBuf[0] = features;
 			rc = 0;
+			break;
+		}
+		case DIOC_SMP_CPU_STATS:
+		{
+			DWORD id = inBuf[0];
+			if(id == 0)
+			{
+				outBuf[0] = bsp_usage();
+				rc = 0;
+			}
+			else
+			{
+				int i;
+				for(i = 0; i < MAX_CORES; i++)
+				{
+					if(ttable[i].data->index == id)
+					{
+						outBuf[0] = ap_usage(ttable[i].data->stats_usage);
+						rc = 0;
+						break;
+					}
+				}
+			}
 			break;
 		}
 		// all others
@@ -354,6 +528,36 @@ void __declspec(naked) VXD_control()
 	};
 }
 
+void __stdcall monitor_proc(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
+{
+	int i;
+	for(i = 0; i < MAX_CORES; i++)
+	{
+		if(ttable[i].data != NULL)
+		{
+			ttable[i].data->stats_usage <<= 1;
+			if(ttable[i].data->status > S_SLEEP)
+			{
+				ttable[i].data->stats_usage |= 1;
+			}
+		}
+	}
+	Set_Global_Time_Out(AP_MONITOR_TIMEOUT, NULL, monitor_entry);
+}
+
+void __declspec(naked) monitor_entry()
+{
+	_asm
+	{
+		push ebx ; vmhandle
+		push ecx ; Tardiness
+		push edx ; RefData
+		push ebp ; crs
+		call monitor_proc
+		retn
+	};
+}
+
 #ifdef DEBUG
 
 void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
@@ -363,7 +567,7 @@ void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 	{
 		if(ttable[i].data != NULL)
 		{
-			tracef("CPU#%d = %d ", i, ttable[i].data->status);
+			tracef("CPU#%d = %d (%X) ", i, ttable[i].data->status,  ttable[i].data->stats_usage);
 		}
 	};
 	tracef("\n");

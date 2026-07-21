@@ -36,6 +36,8 @@
 #define VXD_PM16_VERSION        0
 #define VXD_PM16_VMM_VERSION    1
 
+#define VXD_PROFILE "smp"
+
 #include <windows.h>
 #include <stdarg.h>
 #include <stdint.h>

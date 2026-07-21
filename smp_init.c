@@ -128,6 +128,7 @@ uint32_t kernel_flat = 0;
 static mpfp_t *mpfp = NULL;
 int cpu_count = 0;
 static volatile uint32_t *lapic32 = NULL;
+extern int max_cpus;
 
 static uint32_t *boot_pde = NULL;
 static uint32_t  boot_pde_phy = NULL;
@@ -366,7 +367,7 @@ BOOL smp_init()
 			alertf("Invalid PCMP signature!\n");
 			return NULL;
 		}
-				
+
 		ttable = (titem_t*)_PageCode(RoundToPages(sizeof(titem_t)*MAX_CORES), 1, NULL);
 		kernel = (uint8_t*)_PageCode(1, 0, NULL);
 		boot_pde = (uint32_t*)_PageCode(1, 1, &boot_pde_phy);
@@ -413,44 +414,53 @@ BOOL smp_init()
 						uint8_t apid = cpu->local_apic_id;
 						dbg_printf("Found AP: %u\n", apid);
 						
-						ttable[apid].stack = _PageCode(STACK_PAGES, 1, NULL);
-						memset((void*)(ttable[apid].stack), 0xCC, STACK_SIZE);
-						
-						mem = (void*)_PageCode(DATA_PAGES, 1, &phy);
-						
-						ttable[apid].data = mem;
-
-						memset(ttable[apid].data->gdt, 0, 32*sizeof(uint32_t));
-						memcpy(ttable[apid].data->gdt, def_gdt, sizeof(def_gdt));
-						
-						tss_flat = (uint32_t)ttable[apid].data->tss;
-						
-						ttable[apid].data->gdt[11] |=  (tss_flat & 0xFF000000);
-						ttable[apid].data->gdt[11] |= ((tss_flat & 0x00FF0000) >> 16);
-						ttable[apid].data->gdt[10] |= ((tss_flat & 0x0000FFFF) << 16);
-
-						memset(ttable[apid].data->tss, 0, 128);
-
-						ttable[apid].data->tss[1] = ttable[apid].stack + STACK_OFF_TSS; // esp0
-						ttable[apid].data->tss[2] = 0x10; // ss0
-						ttable[apid].data->tss[16] = (104 << 16); // IOPB 
-
-						ttable[apid].data->cpu_cr3 = phy + P_SIZE;
-						ttable[apid].data->pd = (uint32_t*)(((uint8_t*)mem) + P_SIZE);
-
-						ttable[apid].data->cpu_cr4 = (1 << 9) | (1 << 10); // OSFXSR + OSXMMEXCP
-						ttable[apid].data->xsaveflags = xsave_flags; // using fxsave
-						if(xsave_flags != 0)
+						if(ap_count + 1 < max_cpus)
 						{
-							ttable[apid].data->cpu_cr4 |= (1 << 18); // OSXSAVE
+							ttable[apid].stack = _PageCode(STACK_PAGES, 1, NULL);
+							memset((void*)(ttable[apid].stack), 0xCC, STACK_SIZE);
+							
+							mem = (void*)_PageCode(DATA_PAGES, 1, &phy);
+							
+							ttable[apid].data = mem;
+	
+							memset(ttable[apid].data->gdt, 0, 32*sizeof(uint32_t));
+							memcpy(ttable[apid].data->gdt, def_gdt, sizeof(def_gdt));
+							
+							tss_flat = (uint32_t)ttable[apid].data->tss;
+							
+							ttable[apid].data->gdt[11] |=  (tss_flat & 0xFF000000);
+							ttable[apid].data->gdt[11] |= ((tss_flat & 0x00FF0000) >> 16);
+							ttable[apid].data->gdt[10] |= ((tss_flat & 0x0000FFFF) << 16);
+	
+							memset(ttable[apid].data->tss, 0, 128);
+	
+							ttable[apid].data->tss[1] = ttable[apid].stack + STACK_OFF_TSS; // esp0
+							ttable[apid].data->tss[2] = 0x10; // ss0
+							ttable[apid].data->tss[16] = (104 << 16); // IOPB 
+	
+							ttable[apid].data->cpu_cr3 = phy + P_SIZE;
+							ttable[apid].data->pd = (uint32_t*)(((uint8_t*)mem) + P_SIZE);
+	
+							ttable[apid].data->cpu_cr4 = (1 << 9) | (1 << 10); // OSFXSR + OSXMMEXCP
+							ttable[apid].data->xsaveflags = xsave_flags; // using fxsave
+							if(xsave_flags != 0)
+							{
+								ttable[apid].data->cpu_cr4 |= (1 << 18); // OSXSAVE
+							}
+	
+							ttable[apid].data->index = ap_count+1;
+	
+							ttable[apid].data->entry = (uint32_t)smp_ap_main;
+							ttable[apid].data->status = S_BUSY;
+							
+							ttable[apid].data->stats_usage = 0;
+							
+							ap_count++;
 						}
-
-						ttable[apid].data->index = ap_count+1;
-
-						ttable[apid].data->entry = (uint32_t)smp_ap_main;
-						ttable[apid].data->status = S_BUSY;
-						
-						ap_count++;
+						else
+						{
+							dbg_printf(" AP ignored due maxcpus=%d\n", max_cpus);
+						}
 					}
 					else
 					{
