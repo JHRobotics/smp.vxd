@@ -69,6 +69,10 @@ BOOL quiet = FALSE;
 BOOL sys_pause = FALSE;
 int  max_cpus = 256;
 
+/* smp_init TSC freq */
+extern DWORD tsc_ms_clock;
+extern DWORD tsc_us_clock;
+
 void Sys_Critical_Init_proc(){ }
 
 void __declspec(naked) timeout_entry();
@@ -177,6 +181,47 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 			cpu_flags.regs.regEBX,
 			cpu_flags.regs.regECX,
 			cpu_flags.regs.regEDX);
+		
+		if((cpu_flags.regs.regEDX & (CPUID_EDX_FXSR | CPUID_EDX_MMX | CPUID_EDX_TSC | CPUID_EDX_MSR))
+			!= (CPUID_EDX_FXSR | CPUID_EDX_MMX | CPUID_EDX_TSC | CPUID_EDX_MSR))
+		{
+	 		if(!quiet)
+	 		{
+	 			alertf(VXD_DEVICE_NAME ": needs support in CPU at minimum: MSR, MMX, FXSR, RSC. Sorry.\n");
+	 		}
+			return;
+		}
+		
+		if(cpuid_res.regs.regEAX >= 0x16)
+		{
+			/* read TSC from CPUID */
+			DWORD tsc_freq = cpuid_tsc_freq();
+			dbg_printf("TSC freq = %u\n", tsc_freq);
+			
+			if(tsc_freq != 0)
+			{
+				tsc_ms_clock = tsc_freq;
+				tsc_us_clock = tsc_freq / 1000;
+			}
+#ifdef DEBUG
+			else
+			{
+				cpuid_result_t leaf15h;
+				cpuid(0x15, &leaf15h);
+				dbg_printf("15h: %X %X %X\n", leaf15h.regs.regEAX, leaf15h.regs.regEBX, leaf15h.regs.regECX);
+				cpuid(0x16, &leaf15h);
+				dbg_printf("16h: %X\n", leaf15h.regs.regEAX);
+			}
+#endif
+		}
+ 	}
+ 	else
+ 	{
+ 		if(!quiet)
+ 		{
+ 			alertf(VXD_DEVICE_NAME ": CPUID is supported, but only leaf 00H, sorry.\n");
+ 		}
+ 		return;
  	}
  	
  	if(((cpu_flags.regs.regEDX & CPUID_EDX_HTT) != 0) && max_cpus > 1)

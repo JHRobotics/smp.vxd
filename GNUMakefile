@@ -15,10 +15,11 @@ FASM=fasm
 BIN2H=bin2h
 CAT=cat
 CP=cp -f
+MKDIR=mkdir
 
 GCC_CC=gcc
 GCC_INC=-I.
-GCC_CFLAGS=-std=c99 -Wall -DSMP9X -DNOCRT -DNOCRT_FLOAT -DNOCRT_NOREPLACE
+GCC_CFLAGS=-std=c99 -Wall -DSMP9X -DNOCRT -DNOCRT_FLOAT -DNOCRT_NOREPLACE -march=pentium2
 GCC_LDFLAGS=
 GCC_LDFLAGS_WIN=-mwindows $(GCC_LDFLAGS)
 
@@ -32,8 +33,8 @@ SMP9X_OBJS=smp9x.gcc.o
 
 NOCRT_OBJS=nocrt/nocrt.gcc.o nocrt/nocrt_math.gcc.o
 
-LIBSMP_OBJS=$(SMP9X_OBJS) libsmp_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o
-MESASMP_OBJS=$(SMP9X_OBJS) $(NOCRT_OBJS) libsmp/copy.fasm.o mesa_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o
+LIBSMP_OBJS=$(SMP9X_OBJS) libsmp_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o libsmp/cpuinfo.fasm.o
+MESASMP_OBJS=$(SMP9X_OBJS) $(NOCRT_OBJS) libsmp/copy.fasm.o mesa_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o libsmp/cpuinfo.fasm.o
 
 SMP_TESTS=tests/prime1.exe tests/prime2.exe tests/prime3.exe tests/smpload.exe tests/systemcall.exe \
   tests/doscall.exe tests/ssetest.exe tests/avxtest.exe
@@ -53,12 +54,12 @@ else
   GCC_CFLAGS += -O2
 endif
 
-GCC_CFLAGS_NOCRT = -std=c99 -O2 -Wall -Wextra -DNOCRT -DNOCRT_FILE -DNOCRT_FLOAT -DNOCRT_MEM -ffreestanding -nostdlib
+GCC_CFLAGS_NOCRT = -std=c99 -O2 -Wall -Wextra -DNOCRT -DNOCRT_FILE -DNOCRT_FLOAT -DNOCRT_MEM -ffreestanding -nostdlib -mfpmath=387 -march=i386
 GCC_LDFLAGS_NOCRT = -static -nostdlib -nodefaultlibs
 GCC_NOCRT_INC=-I. -Inocrt
 
 MCPUINFO_OBJS = nocrt/nocrt.nocrt.o nocrt/nocrt_exe.nocrt.o nocrt/nocrt_file_win.nocrt.o \
-  nocrt/nocrt_math.nocrt.o nocrt/nocrt_mem_win.nocrt.o mcpuinfo/cpuinfo.fasm.o mcpuinfo/mcpuinfo.nocrt.o \
+  nocrt/nocrt_math.nocrt.o nocrt/nocrt_mem_win.nocrt.o libsmp/cpuinfo.fasm.o mcpuinfo/mcpuinfo.nocrt.o \
   mcpuinfo/counter.nocrt.o mcpuinfo/perf.nocrt.o mcpuinfo/smpcon.nocrt.o
 
 all: $(BIN) libsmp.dll mesasmp.dll tests
@@ -188,9 +189,14 @@ clean:
 	-$(RM) $(TOOLS)
 
 release: all
+	-$(MKDIR) "release"
+	-$(MKDIR) "release/driver"
+	-$(MKDIR) "release/test-basic"
+	-$(MKDIR) "release/test-mesa3d"
 	$(CP) smp.vxd release/driver/smp.vxd
-	$(CP) libsmp.dll release/test-basic/libsmp.dll
+	$(CP) libsmp.dll release/driver/libsmp.dll
 	$(CP) mesasmp.dll release/test-mesa3d/mesasmp.dll
 	$(CP) tests/*.exe release/test-basic/
+	$(CP) mcpuinfo.exe release/test-basic/
 	$(CP) README.md release/readme.txt
 	$(CP) LICENSE release/licence.txt

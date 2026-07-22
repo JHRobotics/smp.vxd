@@ -27,6 +27,7 @@ float rdpiY = 1.0;
 void setHightDPI()
 {
 	HDC hdc;
+#if 0
 	SetProcessDPIAware_f SetProcessDPIAware_h = NULL;
 	HMODULE hmod = GetModuleHandleA("user32.dll");
 	if(hmod != NULL)
@@ -38,6 +39,7 @@ void setHightDPI()
 			SetProcessDPIAware_h();
 		}
 	}
+#endif
 		
 	hdc = GetDC(NULL);
 	if (hdc)
@@ -46,6 +48,7 @@ void setHightDPI()
 		rdpiY = GetDeviceCaps(hdc, LOGPIXELSY) / 96.0f;
 		ReleaseDC(NULL, hdc);
 	}
+	
 }
 #define DPIX(_spx) ((int)(ceil((_spx)*rdpiX)))
 #define DPIY(_spx) ((int)(ceil((_spx)*rdpiY)))
@@ -213,6 +216,13 @@ void cpu_ident()
 		{
 			DUMP_LEAF(0x80000000);
 			DUMP_LEAF(0x80000001);
+		}
+		if(maxleaf >= 0x16)
+		{
+			DUMP_LEAF(0x00000015);
+			DUMP_LEAF(0x00000016);
+			
+			ptr += sprintf(ptr, "TSC frequency: %u kHz\n", cpuid_tsc_freq());
 		}
 	}
 	else
@@ -463,7 +473,7 @@ int main()
 	}
 	
 	cpu_h += 25;
-	CreateWindowA("EDIT", cpuid_dump, (WS_VISIBLE | WS_CHILD | ES_LEFT | ES_READONLY | ES_MULTILINE | WS_BORDER | WS_GROUP | ES_AUTOHSCROLL),
+	CreateWindowA("EDIT", cpuid_dump, (WS_VISIBLE | WS_CHILD | ES_LEFT | ES_READONLY | ES_MULTILINE | WS_BORDER | WS_GROUP | ES_AUTOHSCROLL | ES_AUTOVSCROLL),
 		DPIX(10), DPIY(185+cpu_h), DPIX(WIN_W-30), DPIY((win_h-20) - (185+cpu_h+25)), win, 0, hInst, NULL);
 
 	SetTimer(win, IDT_TIMER1, REFRESH_MS,  NULL);
@@ -500,6 +510,7 @@ int main()
 
 static void update_stats(HWND win)
 {
+	static DWORD last_sum = -1;
 	DWORD sum = 0;
 	DWORD c = 0;
 	DWORD p, i;
@@ -527,18 +538,23 @@ static void update_stats(HWND win)
 	
 	//printf("total: %d\n", total);
 	
-	HICON icon = counterIcon(total);
-	SetClassLongPtr(win, GCLP_HICON, (LONG_PTR)icon);
-	
-	notify_set(win, icon);
-	
-	HICON very_old_icon = old_icon;
-	old_icon = load_icon;
-	load_icon = icon;
-	
-	if(very_old_icon)
+	if(last_sum != sum)
 	{
-		DestroyIcon(very_old_icon);
+		HICON icon = counterIcon(total);
+		SetClassLongPtr(win, GCLP_HICON, (LONG_PTR)icon);
+		
+		notify_set(win, icon);
+		
+		HICON very_old_icon = old_icon;
+		old_icon = load_icon;
+		load_icon = icon;
+		
+		if(very_old_icon)
+		{
+			DestroyIcon(very_old_icon);
+		}
+		
+		last_sum = sum;
 	}
 }
 

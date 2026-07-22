@@ -20,7 +20,9 @@
  * DEALINGS IN THE SOFTWARE.                                                  *
  ******************************************************************************/
 #include <windows.h>
+#include <stdint.h>
 #include "smp9x.h"
+#include "cpuid_smp.h"
 #include <stdio.h>
 
 void smp9x_thread_info_attach();
@@ -35,6 +37,11 @@ BOOL WINAPI DllMain(
 	switch(fdwReason) 
 	{ 
 		case DLL_PROCESS_ATTACH:
+			if(cpuid(0, NULL) == 0)
+			{
+				/* cannot continue without CPUID */
+				return FALSE;
+			}
 			smp9x_init();
 			break;
 		case DLL_THREAD_ATTACH:

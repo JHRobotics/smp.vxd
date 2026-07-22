@@ -57,3 +57,55 @@ int cpuid(int page, cpuid_result_t *result)
 	return rc;
 }
 
+/**
+ *
+ * @return: frequency in kHz (mainly because 32bit overflow at > ~4.3 GHz CPU)
+ *
+ **/
+unsigned long cpuid_tsc_freq()
+{
+	unsigned long freq = 0;
+	_asm
+	{
+		push ebx
+		push edi
+		push esi
+		mov eax, 0x15
+		cpuid
+		test eax, eax
+		jz tsc_done
+		test ecx, ecx
+		jz read_16h ; TSCFreq = (ECX*(EBX/EAX))/1000 = ((ECX / 1000)*EBX)/EAX
+			mov esi, eax
+			mov edi, ebx
+
+			mov eax, ecx
+			xor edx, edx
+			mov ebx, 1000
+			div ebx
+			xor edx, edx
+			mul edi
+			jo tsc_done
+
+			div esi
+			mov [freq], eax
+			jmp tsc_done
+		read_16h:
+			; TSCFreq = CPUID_16h_EAX * 1000
+			mov eax, 0x16
+			cpuid
+			test eax, eax
+			jz tsc_done
+			mov ecx, 1000
+			mul ecx
+			jo tsc_done
+			mov [freq], eax
+
+		tsc_done:
+		pop esi
+		pop edi
+		pop ebx
+	};
+	
+	return freq;
+}

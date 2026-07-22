@@ -37,6 +37,8 @@ typedef union cpuid_result
 
 int cpuid(int page, cpuid_result_t *result);
 
+unsigned long cpuid_tsc_freq();
+
 /* leaf 0x01 */
 
 #define CPUID_ECX_SSE3          (1 << 0)

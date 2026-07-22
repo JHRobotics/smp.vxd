@@ -27,6 +27,9 @@ typedef DWORD size_t;
 #include "apboot.h"
 #include "apkernel.h"
 
+DWORD tsc_ms_clock = 3000000;
+DWORD tsc_us_clock = 3000;
+
 /***
  * looks like VMM hasn't any function for sync wait (delay, sleep, whatever)
  * 1 = one cycle
@@ -52,20 +55,20 @@ void delay_loop(DWORD repeats)
 			cmp eax,esi
 			jb loop_repeat
 
-			pop edi
-			pop esi
+		pop edi
+		pop esi
 	};
 }
 
 /* TODO: calibate the timer! - this expect ~3 GHz CPU */
 void mdelay(DWORD ms)
 {
-	delay_loop(ms*3000000);
+	delay_loop(ms*tsc_ms_clock);
 }
 
 void udelay(DWORD us)
 {
-	delay_loop(us*3000);
+	delay_loop(us*tsc_us_clock);
 }
 
 static uint8_t mp_checksum(uint8_t *ptr, unsigned int len)
