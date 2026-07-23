@@ -371,6 +371,7 @@ BOOL fpu_need_extra_save()
 int switch_to_ap(PCRS_32 crs, DWORD thread_id)
 {
 	BOOL found = FALSE;
+	BOOL wakeup = FALSE;
 	int cpu;
 	for(cpu = 0; cpu < MAX_CORES; cpu++)
 	{
@@ -412,6 +413,11 @@ int switch_to_ap(PCRS_32 crs, DWORD thread_id)
 								crs->Client_EIP = kernel_flat + SMP_OFFSET_TRAMPOLINE;
 								ts->smp_status = 1;
 								ts->smp_apid = cpu;
+								
+								if(s == S_SLEEP)
+								{
+									wakeup = TRUE;
+								}
 							
 								s = S_LOADED;
 								found = 1;
@@ -424,7 +430,7 @@ int switch_to_ap(PCRS_32 crs, DWORD thread_id)
 				} // case
 			} // switch
 				
-			if(found)
+			if(wakeup)
 			{
 				/* must be before unlock to prevent deadlock */
 				smp_wakeup(cpu);

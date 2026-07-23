@@ -27,49 +27,6 @@ typedef DWORD size_t;
 #include "apboot.h"
 #include "apkernel.h"
 
-DWORD tsc_ms_clock = 3000000;
-DWORD tsc_us_clock = 3000;
-
-/***
- * looks like VMM hasn't any function for sync wait (delay, sleep, whatever)
- * 1 = one cycle
- *
- **/
-void delay_loop(DWORD repeats)
-{
-	_asm
-	{
-		push esi
-		push edi
-		rdtsc
-		mov esi, eax
-		mov edi, edx
-		mov eax, [repeats]
-		add esi, eax
-		adc edi, 0
-	
-		loop_repeat:
-			rdtsc
-			cmp edx,edi
-			jb loop_repeat
-			cmp eax,esi
-			jb loop_repeat
-
-		pop edi
-		pop esi
-	};
-}
-
-/* TODO: calibate the timer! - this expect ~3 GHz CPU */
-void mdelay(DWORD ms)
-{
-	delay_loop(ms*tsc_ms_clock);
-}
-
-void udelay(DWORD us)
-{
-	delay_loop(us*tsc_us_clock);
-}
 
 static uint8_t mp_checksum(uint8_t *ptr, unsigned int len)
 {
@@ -305,6 +262,8 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		{
 			_asm pause;
 		}
+		
+		dbg_printf("AP ready\n");
 	}
 	
 	/* restore memory whatever was there.... */
@@ -458,6 +417,13 @@ BOOL smp_init()
 							
 							ttable[apid].data->stats_usage = 0;
 							
+#if 0
+							tsc_get(ttable[apid].data->last_active);
+#else
+							/* AP will sleep immediately after boot (usefull on VMs) */
+							ttable[apid].data->last_active[0] = 0;
+							ttable[apid].data->last_active[1] = 0;
+#endif
 							ap_count++;
 						}
 						else

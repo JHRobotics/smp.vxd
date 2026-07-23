@@ -27,7 +27,7 @@ BIN=smp.vxd
 TOOLS=fixlink.exe generator.exe mcpuinfo.exe
 
 SMP_VXD_OBJS=smp.wcc.obj vxd_lib.wcc.obj vxd_debug.wcc.obj smp_init.wcc.obj smp_proc.wcc.obj \
-  vxd_terror.wcc.obj taskswitch.wcc.obj paging.wcc.obj cpuid.wcc.obj
+  vxd_terror.wcc.obj taskswitch.wcc.obj paging.wcc.obj cpuid.wcc.obj vxd_timer.wcc.obj
 
 SMP9X_OBJS=smp9x.gcc.o
 
@@ -197,6 +197,6 @@ release: all
 	$(CP) libsmp.dll release/driver/libsmp.dll
 	$(CP) mesasmp.dll release/test-mesa3d/mesasmp.dll
 	$(CP) tests/*.exe release/test-basic/
-	$(CP) mcpuinfo.exe release/test-basic/
+	$(CP) mcpuinfo.exe release
 	$(CP) README.md release/readme.txt
 	$(CP) LICENSE release/licence.txt

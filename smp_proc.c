@@ -86,6 +86,9 @@ void smp_sleep()
 	};
 }
 
+extern DWORD tsc_ms_clock;
+static uint32_t sleep_delay_ms = 100;
+
 int __cdecl smp_ap_main(uint32_t apid)
 {
 	uint32_t s;
@@ -103,7 +106,10 @@ int __cdecl smp_ap_main(uint32_t apid)
 	switch(s)
 	{
 		case S_READY:
-			s = S_SLEEP;
+			if(tsc_ring(ttable[apid].data->last_active, tsc_ms_clock * sleep_delay_ms))
+			{
+				s = S_SLEEP;
+			}
 			break;
 		case S_SLEEP:
 			// sheeps++
@@ -128,18 +134,27 @@ int __cdecl smp_ap_main(uint32_t apid)
 		}
 		case S_CARGO:
 			// wait to unload...
+			tsc_get(ttable[apid].data->last_active);
 			break;
 		case S_DIRCARD:
+			tsc_get(ttable[apid].data->last_active);
 			s = S_READY;
 			break;
 	}
 			
 	atomic_unlock(sp, s);
 	
-	if(s == S_SLEEP || s == S_CARGO)
+	if(s == S_SLEEP/* || s == S_CARGO*/)
 	{
 		smp_sleep();
 	}
+#if 0
+	else if(s == S_READY)
+	{
+		/* give BSP some time to spin the lock */
+		udelay(1);
+	}
+#endif
 	
 	return rc;
 }

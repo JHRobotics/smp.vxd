@@ -46,6 +46,7 @@
 #include "vxd_lib.h"
 #include "vxd_debug.h"
 #include "vxd_terror.h"
+#include "vxd_timer.h"
 #include "smp.h"
 #include "taskswitch.h"
 #include "smp9x.h"

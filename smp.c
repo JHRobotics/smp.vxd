@@ -200,8 +200,8 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 			
 			if(tsc_freq != 0)
 			{
-				tsc_ms_clock = tsc_freq;
-				tsc_us_clock = tsc_freq / 1000;
+				tsc_ms_clock = tsc_freq * 1000;
+				tsc_us_clock = tsc_freq;
 			}
 #ifdef DEBUG
 			else
