@@ -155,6 +155,7 @@ typedef struct titem
 #pragma pack(pop)
 
 extern titem_t *ttable;
+extern int ttable_max;
 
 BOOL smp_init();
 BOOL smp_wakeup(int apid);

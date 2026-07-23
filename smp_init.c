@@ -82,6 +82,7 @@ mpfp_t *smp_get_mpfp()
 #define AP_BOOT_ADDR 0x8000
 
 titem_t *ttable = NULL;
+int ttable_max = 0;
 
 static uint8_t *kernel = NULL;
 uint32_t kernel_flat = 0;
@@ -192,7 +193,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 	dbg_printf("APIC ready\n");
 	
 	// for each Local APIC ID we do...
-	for(i = 0; i < MAX_CORES; i++)
+	for(i = 0; i <= ttable_max; i++)
 	{
 		// CPU without stack is is not present
 		if(ttable[i].stack == 0) continue;
@@ -425,6 +426,11 @@ BOOL smp_init()
 							ttable[apid].data->last_active[1] = 0;
 #endif
 							ap_count++;
+							
+							if(apid > ttable_max)
+							{
+								ttable_max = apid;
+							}
 						}
 						else
 						{

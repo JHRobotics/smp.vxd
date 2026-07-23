@@ -444,7 +444,7 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 			else
 			{
 				int i;
-				for(i = 0; i < MAX_CORES; i++)
+				for(i = 0; i <= ttable_max; i++)
 				{
 					if(ttable[i].data->index == id)
 					{
@@ -576,12 +576,14 @@ void __declspec(naked) VXD_control()
 void __stdcall monitor_proc(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 {
 	int i;
-	for(i = 0; i < MAX_CORES; i++)
+	for(i = 0; i <= ttable_max; i++)
 	{
 		if(ttable[i].data != NULL)
 		{
+			uint32_t s = ttable[i].data->status;
+			
 			ttable[i].data->stats_usage <<= 1;
-			if(ttable[i].data->status > S_SLEEP)
+			if(s > S_SLEEP || s == S_BUSY)
 			{
 				ttable[i].data->stats_usage |= 1;
 			}
@@ -608,7 +610,7 @@ void __declspec(naked) monitor_entry()
 void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 {
 	int i;
-	for(i = 0; i < MAX_CORES; i++)
+	for(i = 0; i <= ttable_max; i++)
 	{
 		if(ttable[i].data != NULL)
 		{
@@ -617,16 +619,14 @@ void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 	};
 	tracef("\n");
 	
+	for(i = 0; i <= ttable_max; i++)
 	{
-		for(i = 0; i < MAX_CORES; i++)
+		if(ttable[i].data != NULL)
 		{
-			if(ttable[i].data != NULL)
-			{
-				PCRS_32 is = (PCRS_32)(ttable[i].data->init_state);
-				PCRS_32 ps = (PCRS_32)(ttable[i].data->proc_state);
-				tracef("CPU#%d: proc_state->Client_EFlags=%X proc_state->Client_EIP=%X\n",
-					i, ps->Client_EFlags, ps->Client_EIP);
-			}
+			PCRS_32 is = (PCRS_32)(ttable[i].data->init_state);
+			PCRS_32 ps = (PCRS_32)(ttable[i].data->proc_state);
+			tracef("CPU#%d: proc_state->Client_EFlags=%X proc_state->Client_EIP=%X\n",
+				i, ps->Client_EFlags, ps->Client_EIP);
 		}
 	}
 

@@ -373,7 +373,7 @@ int switch_to_ap(PCRS_32 crs, DWORD thread_id)
 	BOOL found = FALSE;
 	BOOL wakeup = FALSE;
 	int cpu;
-	for(cpu = 0; cpu < MAX_CORES; cpu++)
+	for(cpu = 0; cpu <= ttable_max; cpu++)
 	{
 		if(ttable[cpu].data != NULL)
 		{
