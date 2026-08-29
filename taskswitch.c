@@ -39,7 +39,7 @@ ts_thread_t *ts_thread_create(DWORD tid)
 	ts_thread_t *ts = (ts_thread_t *)_PageAllocate(TS_THREAD_PAGES, PG_SYS, 0, 0x0, PAGE_ALLOC_MIN, PAGE_ALLOC_MAX, NULL, PAGEFIXED|PAGEZEROINIT);
 	ts_thread_t **tindex;
 	DWORD hash;
-		
+
 	if(ts != NULL)
 	{
 		ts->tid = tid;
@@ -49,7 +49,7 @@ ts_thread_t *ts_thread_create(DWORD tid)
 		ts->smp_bsp_idle_proc = 0;
 		ts->smp_bsp_idle_lock = NULL;
 		ts->dirty = 1;
-		ts->data = (DWORD*)(ts+1);
+		ts->data = (void*)(ts+1);
 		ts->mode = SMP_MODE_SYSTEM;
 		
 		hash = TS_HASH(tid);
@@ -65,6 +65,7 @@ ts_thread_t *ts_thread_create(DWORD tid)
 			}
 			tindex = &((*tindex)->next);
 		}
+		memset(ts->data, 0, sizeof(smp9x_thread_extradata_t));
 		
 		*tindex = ts;
 		
@@ -118,8 +119,7 @@ void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 {
 	ts_thread_t *ts;
 	DWORD orig_cr0 = GetCR0();
-	act_tid = cur_tid;
-	
+
 	/* if TS flag is set, we can't save/restore FPU/XMM/YMM state, so clear it */
 	if(orig_cr0 & 0x8)
 	{
@@ -131,9 +131,9 @@ void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 	ts = ts_thread_get(old_tid);
 	if(ts)
 	{
-		if(fpu_need_extra_save())
+		TCB_t *cbs_old = (TCB_t*)old_tid;
+		if(fpu_need_extra_save(FALSE))
 		{
-			TCB_t *cbs_old = (TCB_t*)old_tid;
 			if((cbs_old->TCB_Flags & THFLAG_RING0_THREAD) == 0)
 			{
 				//dbg_printf(" S");
@@ -143,7 +143,11 @@ void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 			}
 		}
 		
-		if(ts->mode == SMP_MODE_AUTORUN && ts->smp_status == 0)
+		if(ts->mode == SMP_MODE_AUTORUN
+			&& ts->smp_status == 0
+			&& (cbs_old->TCB_Flags & THFLAG_THREAD_BLOCKED) == 0
+			&& ts->pagefault == 0
+			)
 		{
 			TCB_t *cbs = (TCB_t*)old_tid;
 			//dbg_printf("TS: tid=%X, eip=%X esp=%X\n", old_tid, cbs->TCB_ClientPtr->Client_EIP, cbs->TCB_ClientPtr->Client_ESP);
@@ -151,41 +155,42 @@ void __stdcall thread_switch(DWORD cur_tid, DWORD old_tid)
 			
 			if(cbs->TCB_ClientPtr->Client_EIP >= 0x00100000 && cbs->TCB_ClientPtr->Client_EIP < 0x80000000)
 			{
-				switch_to_ap(cbs->TCB_ClientPtr, old_tid);
-			}
-		}
-	}
-
-	if(fpu_need_extra_save())
-	{
-		TCB_t *cbs_new = (TCB_t*)cur_tid;
-		if((cbs_new->TCB_Flags & THFLAG_RING0_THREAD) == 0)
-		{
-			ts = ts_thread_get(cur_tid);
-			if(ts)
-			{
-				if(ts->dirty == 0)
+				if(gdata.ap_free_cnt > 0)
 				{
-					//dbg_printf(" R");
-					fpu_restore(TRUE, ts->fpu_state);
-					//dbg_printf(".");
+					switch_to_ap(cbs->TCB_ClientPtr, old_tid);
 				}
 			}
 		}
 	}
-	
+
+	gdata.bsp_thread = ts_thread_get(cur_tid);
+	if(gdata.bsp_thread)
+	{
+		if(fpu_need_extra_save(TRUE))
+		{
+			TCB_t *cbs_new = (TCB_t*)cur_tid;
+			if((cbs_new->TCB_Flags & THFLAG_RING0_THREAD) == 0)
+			{
+				if(gdata.bsp_thread->dirty == 0)
+				{
+					//dbg_printf(" R");
+					fpu_restore(TRUE, gdata.bsp_thread->fpu_state);
+					//dbg_printf(".");
+				}
+			}
+		}
+		gdata.bsp_thread->pagefault = 0;
+	}
+
 	//dbg_printf("OK\n");
 	
 	/* set back TS flag, not necessary in theory but i don't want to confuse os */
 	if(orig_cr0 & 0x8)
 	{
-		_asm
-		{
-			mov eax, [orig_cr0]
-			mov cr0, eax
-		};
+		SetCR0(orig_cr0);
 	}
 	
+	act_tid = cur_tid;
 }
 
 /* MSDN: ThreadSwitchCallback */
@@ -197,7 +202,7 @@ static void __declspec(naked) thread_switch_entry()
 		push edi   ; CurThreadHandle
 		call thread_switch
 		ret
-	}
+	};
 }
 
 void ts_init()
@@ -210,16 +215,19 @@ void ts_init()
 void callback_breakpoint_entry();
 
 static  void __declspec(naked) callback_int3_entry();
+static  void __declspec(naked) callback_pf_entry();
 
 BOOL smp_switch_install()
 {
 	Hook_PM_Fault(0x3, ((DWORD)callback_int3_entry) + CALLBACK_HEADER_SIZE);
+	Hook_PM_Fault(0xE, ((DWORD)callback_pf_entry) + CALLBACK_HEADER_SIZE);
 	return TRUE;
 }
 
 void smp_switch_uninstall()
 {
 	Unhook_PM_Fault(0x3, ((DWORD)callback_int3_entry) + CALLBACK_HEADER_SIZE);
+	Unhook_PM_Fault(0xE, ((DWORD)callback_pf_entry) + CALLBACK_HEADER_SIZE);
 }
 
 #define SAVE_NOP 0
@@ -227,9 +235,15 @@ void smp_switch_uninstall()
 #define SAVE_XSAVE_ALL 2
 #define SAVE_XSAVE_AVX 3
 
-static int fpu_save_method(sys)
+static int fpu_save_method(BOOL sys, BOOL restore)
 {
 	int m = SAVE_NOP;
+
+	if(sys && !restore)
+	{
+		sys = FALSE;
+	}
+	
 	if(sys)
 	{
 		if(xsave_flags == 0 && no_sys_fxsave) /* no AVX and Windows 95 */
@@ -262,7 +276,7 @@ static int fpu_save_method(sys)
 
 void fpu_save(BOOL sys, uint8_t *dst)
 {
-	int m = fpu_save_method(sys);
+	int m = fpu_save_method(sys, FALSE);
 	//dbg_printf("fpu_save, m=%d, CR0=%X CR4=%X\n", m, GetCR0(), GetCR4());
 	
 	switch(m)
@@ -290,7 +304,7 @@ void fpu_save(BOOL sys, uint8_t *dst)
 				;db 0x0F, 0xC7, 0x2F /* xsaves [edi] */
 				pop edi
 				pop edx
-			}
+			};
 			break;
 		case SAVE_XSAVE_AVX:
 			_asm
@@ -305,14 +319,14 @@ void fpu_save(BOOL sys, uint8_t *dst)
 				;db 0x0F, 0xC7, 0x2F /* xsaves [edi] */
 				pop edi
 				pop edx
-			}
+			};
 			break;
 	}
 }
 
 void fpu_restore(BOOL sys, const uint8_t *src)
 {
-	int m = fpu_save_method(sys);
+	int m = fpu_save_method(sys, TRUE);
 	
 	switch(m)
 	{
@@ -339,7 +353,7 @@ void fpu_restore(BOOL sys, const uint8_t *src)
 				;db 0x0F, 0xC7, 0x1F /* xrstors [edi] */
 				pop edi
 				pop edx
-			}
+			};
 			break;
 		case SAVE_XSAVE_AVX:
 			_asm
@@ -354,14 +368,14 @@ void fpu_restore(BOOL sys, const uint8_t *src)
 				;db 0x0F, 0xC7, 0x1F /* xrstors [edi] */
 				pop edi
 				pop edx
-			}
+			};
 			break;
 	}
 }
 
-BOOL fpu_need_extra_save()
+BOOL fpu_need_extra_save(BOOL restore)
 {
-	if(fpu_save_method(TRUE) == SAVE_NOP)
+	if(fpu_save_method(TRUE, restore) == SAVE_NOP)
 	{
 		return FALSE;
 	}
@@ -373,79 +387,104 @@ int switch_to_ap(PCRS_32 crs, DWORD thread_id)
 	BOOL found = FALSE;
 	BOOL wakeup = FALSE;
 	int cpu;
-	for(cpu = 0; cpu <= ttable_max; cpu++)
+	
+	ts_thread_t *ts = ts_thread_get(thread_id);
+	
+	if(ts)
 	{
-		if(ttable[cpu].data != NULL)
+		if(ts->smp_status == 0 && ts->smp_bsp_idle_proc != 0)
 		{
-			uint32_t s;
-			volatile uint32_t *lck = &(ttable[cpu].data->status);
-				
-			do
+			for(cpu = 0; cpu <= ttable_max; cpu++)
 			{
-				atomic_lock(lck, &s);
-			} while(s == S_BUSY);
-				
-			switch(s)
-			{
-				case S_READY:
-				case S_SLEEP:
+				if(ttable[cpu].data != NULL)
 				{
-					ts_thread_t *ts = ts_thread_get(thread_id);
-					if(ts)
+					uint32_t s;
+					volatile uint32_t *lck = &(ttable[cpu].data->status);
+						
+					do
 					{
-						if(ts->smp_status == 0 && ts->smp_bsp_idle_proc != 0)
+						atomic_lock(lck, &s);
+					} while(s == S_BUSY);
+						
+					switch(s)
+					{
+						case S_READY:
+						case S_SLEEP:
 						{
 							if(ts->smp_bsp_idle_lock != NULL)
 							{
 								*(ts->smp_bsp_idle_lock) = 1;
-							
-								//ttable[cpu].data->proc_cr4 = GetCR4();
-								ttable[cpu].data->thread_id = thread_id;
-								fpu_save(FALSE, ttable[cpu].data->fpu_state);
-							
-								memcpy(ttable[cpu].data->proc_state, crs, CRS_32_EFECTIVE_SIZE);
-
-								copy_pd(ttable[cpu].data->pd, 0);
-								/* we need change stack otherwise BSP idle and AP will overwrite own data */
-								crs->Client_ESP = ttable[cpu].stack + STACK_OFF_PLACEHOLDER;
-								crs->Client_ECX = ts->smp_bsp_idle_proc;
-								crs->Client_EAX = (DWORD)(ts->smp_bsp_idle_lock);
-								crs->Client_EIP = kernel_flat + SMP_OFFSET_TRAMPOLINE;
-								ts->smp_status = 1;
-								ts->smp_apid = cpu;
-								
-								if(s == S_SLEEP)
-								{
-									wakeup = TRUE;
-								}
-							
-								s = S_LOADED;
-								found = 1;
-							
-								//dbg_printf("SWITCH TO AP#%d: thread=%lX, proc=%X\n", cpu, ttable[cpu].data->thread_id, ts->smp_bsp_idle_proc);
 							} // have lock
-						} // status
-					} // rs
-					break;
-				} // case
-			} // switch
-				
-			if(wakeup)
-			{
-				/* must be before unlock to prevent deadlock */
-				smp_wakeup(cpu);
-			}
+							
+							/* BSP -> AP context */
+							ttable[cpu].data->thread_id = thread_id;
+							fpu_save(FALSE, ttable[cpu].data->fpu_state);				
 
-			atomic_unlock(lck, s);
-					
-			if(found)
-			{
-				//dbg_printf("int3 to AP: %d\n", cpu);
-				return 1;
-			}
+							memcpy(ttable[cpu].data->proc_state, crs, CRS_32_EFECTIVE_SIZE);
+							copy_pd(ttable[cpu].data->pd, 0);
+
+							/* we need change stack otherwise BSP idle and AP will overwrite own data */
+							crs->Client_ESP = ttable[cpu].stack + STACK_OFF_PLACEHOLDER;
+							crs->Client_ECX = ts->smp_bsp_idle_proc;
+							crs->Client_EAX = (DWORD)(ts->smp_bsp_idle_lock);
+							crs->Client_EIP = kernel_flat + SMP_OFFSET_TRAMPOLINE;
+							
+							ts->smp_status = 1;
+							ts->smp_apid = cpu;
+							ttable[cpu].data->thread_ptr = (DWORD)ts;
+							
+							if(s == S_SLEEP)
+							{
+								wakeup = TRUE;
+							}
+							
+							s = S_LOADED;
+							found = 1;
+							
+							{
+								TCB_t *cbs = (TCB_t*)thread_id;
+								//cbs->TCB_Flags |= THFLAG_SUSPENDED;
+							
+							
+							dbg_printf("SWITCH TO AP#%d: thread=%lX, idle=%X, EIP=%X, Flags=%X %X\n", cpu, ttable[cpu].data->thread_id, ts->smp_bsp_idle_proc,						
+								ttable[cpu].data->proc_state[9], cbs->TCB_Flags, cbs->TCB_extErrLocus
+							);
+							
+							}
+							
+							break;
+						} // case
+					} // switch
+
+					if(wakeup)
+					{
+						/* must be before unlock to prevent deadlock */
+						//dbg_printf("wake up: CPU #%d\n", cpu);
+						smp_wakeup(cpu);
+					}
+
+					atomic_unlock(lck, s);
+
+					if(found)
+					{
+						gdata.ap_free_cnt--;
+						//dbg_printf("int3 to AP: %d\n", cpu);
+						return 1;
+					}
+
+				} // ttable[cpu].data
+			} // for
+		}
+		else
+		{
+			dbg_printf("switch_to_ap FAIL: Thread=%X: ts->smp_status=%d, ts->smp_bsp_idle_proc=%X, act=%X\n", thread_id, ts->smp_status, ts->smp_bsp_idle_proc, gdata.bsp_thread->smp_bsp_idle_proc);
 		}
 	}
-	//dbg_printf("int3 but no AP\n");
+	else
+	{
+		dbg_printf("switch_to_ap FAIL: ts_thread_get(%d)=NULL\n", thread_id);
+	}
+	
 	return 0;
 }
 
@@ -469,26 +508,17 @@ int switch_to_bsp(PCRS_32 crs, DWORD thread_id)
 			{
 				DWORD *stack;
 				DWORD tmp_eip;
-				memcpy(crs, ttable[ts->smp_apid].data->proc_state, CRS_32_EFECTIVE_SIZE);
+				//TCB_t *cbs = (TCB_t*)thread_id;
+				
 				fpu_restore(FALSE, ttable[ts->smp_apid].data->fpu_state);
-				
-				tmp_eip = crs->Client_EIP;
-				
-				stack = (DWORD*)(crs->Client_ESP);
-				
-				stack--;
-				*stack = crs->Client_EFlags;
-				stack--;
-				*stack = crs->Client_CS;
-				stack--;
-				*stack = crs->Client_EIP;
-					
-				crs->Client_ESP -= 3*4;
-				crs->Client_EIP = kernel_flat + SMP_OFFSET_INT;
-					
+				memcpy(crs, ttable[ts->smp_apid].data->proc_state, CRS_32_EFECTIVE_SIZE);
+
 				ts->smp_status = 0;
 				s = S_READY;
-				//dbg_printf("SWITCH BSP: AP#%d return=%X\n", ts->smp_apid, tmp_eip);
+				dbg_printf("SWITCH BSP: AP#%d thread=%X EIP=%X ESP=%X\n", ts->smp_apid, thread_id, crs->Client_EIP, crs->Client_ESP);
+				gdata.ap_free_cnt++;
+
+				//cbs->TCB_Flags &= ~THFLAG_SUSPENDED;
 				
 				rc = 1;
 			}
@@ -504,13 +534,42 @@ static DWORD __stdcall callback_int3(DWORD vm, PCRS_32 crs)
 	if(crs->Client_EIP >= (kernel_flat + SMP_OFFSET_FLY) &&
 		crs->Client_EIP < (kernel_flat + SMP_OFFSET_FLY + SMP_FN_BLOCK_SIZE))
 	{
-		switch_to_ap(crs, ts_thread_tid());
+		CRS_32 crs_tmp;
+		DWORD orig_cr0 = GetCR0();
+		if(orig_cr0 & 0x8)
+		{
+			_asm clts;
+		}
+		
+		//switch_to_ap(crs, ts_thread_tid());
+		Save_Client_State(&crs_tmp);
+		switch_to_ap(&crs_tmp, ts_thread_tid());
+		Restore_Client_State(&crs_tmp);
+		
+		if(orig_cr0 & 0x8)
+		{
+			SetCR0(orig_cr0);
+		}
 		return 1;
 	}
 	else if(crs->Client_EIP >= (kernel_flat + SMP_OFFSET_REATTACH) &&
 		crs->Client_EIP < (kernel_flat + SMP_OFFSET_REATTACH + SMP_FN_BLOCK_SIZE))
 	{
-		switch_to_bsp(crs, ts_thread_tid());
+		CRS_32 crs_tmp;
+		DWORD orig_cr0 = GetCR0();
+		if(orig_cr0 & 0x8)
+		{
+			_asm clts;
+		}
+		
+		Save_Client_State(&crs_tmp);
+		switch_to_bsp(&crs_tmp, ts_thread_tid());
+		Restore_Client_State(&crs_tmp);
+		
+		if(orig_cr0 & 0x8)
+		{
+			SetCR0(orig_cr0);
+		}
 		return 1;
 	}
 	
@@ -544,5 +603,51 @@ static void __declspec(naked) callback_int3_entry()
 		popad
 		popfd
 		jmp [int3_next_hook]
-	}
+	};
 }
+
+static DWORD __stdcall callback_pf(DWORD vm, PCRS_32 crs, DWORD fault_address)
+{
+	ts_thread_t *ts = ts_thread_get(ts_thread_tid());
+	if(ts != NULL)
+	{
+		ts->pagefault = 1;
+		if(ts->mode != SMP_MODE_SYSTEM)
+		{
+			dbg_printf("#PF in thread=%X EIP=%X, FAULT=%X\n", ts_thread_tid(), crs->Client_EIP, fault_address);
+		}
+	}
+	
+	return 0;
+}
+
+static DWORD pf_next_hook = 0;
+static void __declspec(naked) callback_pf_entry()
+{
+	_asm
+	{
+		; header (8 bytes)
+		jmp short callback_fp_realentry
+		jmp [pf_next_hook]
+		
+		callback_fp_realentry:
+		pushfd
+		pushad
+		mov eax, cr2
+		push eax
+		push ebp ; crs
+		push ebx ; VM
+		call callback_pf
+		test eax, eax
+		jz callback_pf_next
+			popad
+			popfd
+			retn ; handled!
+		
+		callback_pf_next:
+		popad
+		popfd
+		jmp [pf_next_hook]
+	};
+}
+

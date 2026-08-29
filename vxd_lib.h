@@ -134,6 +134,7 @@ void critical_section_enter();
 void critical_section_leave();
 
 DWORD GetCR0();
+void SetCR0(DWORD new_cr0);
 DWORD GetCR3();
 DWORD GetCR4();
 void Call_When_Thread_Switched(DWORD entry);
@@ -145,5 +146,8 @@ void Unhook_Invalid_Page_Fault(DWORD pf_callback);
 const char *Get_Profile_String(const char *profile, const char *keyname, const char *default_str);
 BOOL Get_Profile_Boolean(const char *profile, const char *keyname, BOOL default_value);
 int Get_Profile_Decimal_Int(const char *profile, const char *keyname, int default_value);
+
+void Save_Client_State(void *crs);
+void Restore_Client_State(void *crs);
 
 #endif /* __VXD_LIB_H__INCLUDED__ */

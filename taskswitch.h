@@ -25,17 +25,18 @@
 typedef struct ts_thread
 {
 	DWORD tid;                /* 0, ring0 id */
-	struct ts_thread *next;  /* 4, next item in ht */
+	struct ts_thread *next;   /* 4, next item in ht */
 	DWORD smp_status;         /* 8, 1 when on AP */
 	DWORD smp_apid;           /* 12, APID */
 	DWORD smp_bsp_idle_proc;  /* 16, placement procedure for BSP */
 	DWORD *smp_bsp_idle_lock; /* 20, pointer to BSP lock */
 	DWORD dirty;              /* 24, 1 when there is no xsave */
-	DWORD *data;              /* 28, pointer do data area */
+	void  *data;              /* 28, pointer do data area */
 	DWORD mode;               /* 32, switching type */
-	DWORD pad[7];             /* 36, pad to XSAVE area */
+	DWORD pagefault;          /* 36, 1 when thread has #PF */
+	DWORD pad[6];             /* 40, pad to XSAVE area */
 	/* XSAVE */
-	uint8_t fpu_state[1024];
+	uint8_t fpu_state[XSAVE_SIZE];
 } ts_thread_t;
 
 

@@ -59,12 +59,19 @@ void __cdecl atomic_unlock(volatile uint32_t *lockptr, int v)
 
 void smp_elevate(DWORD proc, DWORD lockaddr, DWORD mode)
 {
-	
 	ts_thread_t *ts = ts_thread_get(ts_thread_tid());
 	if(ts)
 	{
-		ts->smp_bsp_idle_proc = proc;
-		ts->smp_bsp_idle_lock = (DWORD*)lockaddr;
+		if(mode != SMP_MODE_SYSTEM)
+		{
+			ts->smp_bsp_idle_proc = proc;
+			ts->smp_bsp_idle_lock = (DWORD*)lockaddr;
+		}
+		else
+		{
+			ts->smp_bsp_idle_proc = NULL;
+			ts->smp_bsp_idle_lock = NULL;
+		}
 		ts->mode = mode;
 		dbg_printf("Thread: %lX <- proc=%lX, lock=%lX cr3=%lX\n",
 			ts_thread_tid(), proc, lockaddr, GetCR3()
@@ -87,7 +94,7 @@ void smp_sleep()
 }
 
 extern DWORD tsc_ms_clock;
-static uint32_t sleep_delay_ms = 100;
+static uint32_t sleep_delay_ms = 250;
 
 int __cdecl smp_ap_main(uint32_t apid)
 {
@@ -139,6 +146,7 @@ int __cdecl smp_ap_main(uint32_t apid)
 		case S_DIRCARD:
 			tsc_get(ttable[apid].data->last_active);
 			s = S_READY;
+			gdata.ap_free_cnt++;
 			break;
 	}
 			

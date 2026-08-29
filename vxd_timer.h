@@ -24,6 +24,8 @@
 
 void tsc_get(void *counter_qw_ptr);
 BOOL tsc_ring(const void *counter_qw_ptr, uint32_t extra_ticks);
+void tsc_cmp(void *ptr_a, void *ptr_b, void *ptr_dst);
+uint32_t tsc_div(void *ptr_a, uint32_t b);
 
 void mdelay(DWORD ms);
 void udelay(DWORD us);

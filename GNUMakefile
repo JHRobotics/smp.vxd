@@ -33,14 +33,18 @@ SMP9X_OBJS=smp9x.gcc.o
 
 NOCRT_OBJS=nocrt/nocrt.gcc.o nocrt/nocrt_math.gcc.o
 
-LIBSMP_OBJS=$(SMP9X_OBJS) libsmp_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o libsmp/cpuinfo.fasm.o
-MESASMP_OBJS=$(SMP9X_OBJS) $(NOCRT_OBJS) libsmp/copy.fasm.o mesa_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o libsmp/cpuinfo.fasm.o
+#CRITICALS_OBJS=libsmp/criticals/criticals.gcc.o libsmp/criticals/criticals.fasm.o
+CRITICALS_OBJS=libsmp/criticals/criticals2.gcc.o
+
+LIBSMP_OBJS=$(SMP9X_OBJS) libsmp_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o libsmp/cpuinfo.fasm.o $(CRITICALS_OBJS)
+MESASMP_OBJS=$(SMP9X_OBJS) $(NOCRT_OBJS) libsmp/copy.fasm.o mesa_hook.o libsmp/libsmp.gcc.o libsmp/tryentercriticalsection.gcc.o libsmp/cpuinfo.fasm.o $(CRITICALS_OBJS)
 
 SMP_TESTS=tests/prime1.exe tests/prime2.exe tests/prime3.exe tests/smpload.exe tests/systemcall.exe \
-  tests/doscall.exe tests/ssetest.exe tests/avxtest.exe
+  tests/doscall.exe tests/ssetest.exe tests/avxtest.exe tests/threadid.exe
 
 SMP_TESTS_OBJS=tests/smpload.gcc.o tests/prime1.gcc.o tests/prime2.gcc.o tests/prime3.gcc.o \
-  tests/systemcall.gcc.o tests/doscall.gcc.o tests/ssetest.gcc.o tests/avxtest.gcc.o
+  tests/systemcall.gcc.o tests/doscall.gcc.o tests/ssetest.gcc.o tests/avxtest.gcc.o \
+  tests/threadid.gcc.o
 
 GENERATED=libsmp.def libsmp.txt mesasmp.txt mesasmp.def mesa_hook.asm libsmp_hook.asm apboot.bin apboot.h apkernel.bin apkernel.h
 
@@ -154,6 +158,9 @@ tests/avxtest.gcc.o: tests/avxtest.c
 tests/avxtest.exe: tests/avxtest.gcc.o fixlink.exe
 	$(GCC_CC) $(GCC_CFLAGS) tests/avxtest.gcc.o -o $@ $(GCC_LDFLAGS)
 	fixlink -relink $@ libsmp.dll kernel32.dll msvcrt.dll
+
+tests/threadid.exe: $(SMP9X_OBJS) tests/threadid.gcc.o
+	$(GCC_CC) $(GCC_CFLAGS) $^ -o $@ $(GCC_LDFLAGS)
 
 %.lnk: GNUMakefile
 	echo system win_vxd dynamic > $@

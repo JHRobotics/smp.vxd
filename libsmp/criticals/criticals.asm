@@ -14,6 +14,8 @@ extrn '_cs_get' as cs_get
 extrn '_cs_delete' as cs_delete
 extrn '_TryEnterCriticalSection9x' as TryEnterCriticalSection9x
 
+extrn '_smp9x_sleep_bsp' as sleep_bsp
+
 macro pub fn
 {
 	public fn
@@ -57,9 +59,8 @@ pub _smp9x_TryEnterCriticalSection
 		;mov ecx, [esp+4]
 		push ecx
 		call TryEnterCriticalSection9x
-		mov eax, 1
+		;mov eax, 1
 		ret 4
-
 
 pub _smp9x_EnterCriticalSection
 	mov ecx, [esp+4]
@@ -74,10 +75,9 @@ pub _smp9x_EnterCriticalSection
 		lock xchg [eax], edx
 		cmp edx, JACKPOT
 		jz ecs_critical
-		;push eax
-		;push 0
-		;call [Sleep]
-		;pop eax
+		push eax
+		call sleep_bsp
+		pop eax
 		pause
 		jmp ecs_loop
 	
@@ -118,6 +118,5 @@ pub _smp9x_DeleteCriticalSection
 	
 	jmp [DeleteCriticalSection]
 	ret 4
-
 
 section '.data' data readable writeable

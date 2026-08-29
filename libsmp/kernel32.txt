@@ -118,10 +118,6 @@ kernel32.dll
 	GetConsoleTitleA@8
 	GetCurrencyFormatA@24
 	GetCurrentDirectoryA@8
-	GetCurrentProcess@0
-	GetCurrentProcessId@0
-	GetCurrentThread@0
-	GetCurrentThreadId@0
 	GetDateFormatA@24
 	GetDaylightFlag@0 IGNORE
 	GetDefaultCommConfigA@12
@@ -325,7 +321,6 @@ kernel32.dll
 	RegisterSysMsgHandler@20 IGNORE
 	ReinitializeCriticalSection@4 IGNORE
 	ReleaseMutex@4
-	ReleaseSemaphore@12
 	RemoveDirectoryA@4
 	RequestDeviceWakeup@4 IGNORE
 	RequestWakeupLatency@4 IGNORE
@@ -403,7 +398,6 @@ kernel32.dll
 	TlsAllocInternal IGNORE
 	TlsFree@4
 	TlsFreeInternal@4 IGNORE
-	TlsGetValue@4
 	TlsSetValue@8
 	Toolhelp32ReadProcessMemory@20
 	TransactNamedPipe@28
@@ -425,10 +419,6 @@ kernel32.dll
 	VirtualUnlock@8
 	WaitCommEvent@12
 	WaitForDebugEvent@8
-	WaitForMultipleObjects@16
-	WaitForMultipleObjectsEx@20
-	WaitForSingleObject@8
-	WaitForSingleObjectEx@12
 	WaitNamedPipeA@8
 	WideCharToMultiByte@32
 	WinExec@8
@@ -514,7 +504,20 @@ kernel32.dll
 	SwitchToThread@0  IGNORE
 	GetThreadId@4  HASBODY
 	InitializeCriticalSection@4
-	InitializeCriticalSectionAndSpinCount@8 HASBODY
+	InitializeCriticalSectionAndSpinCount@8 IGNORE
 	EnterCriticalSection@4
 	DeleteCriticalSection@4
 	LeaveCriticalSection@4
+
+	GetCurrentProcess@0 IGNORE
+	GetCurrentProcessId@0 IGNORE
+	GetCurrentThread@0 IGNORE
+	GetCurrentThreadId@0 IGNORE
+
+	WaitForMultipleObjects@16
+	WaitForMultipleObjectsEx@20
+	WaitForSingleObject@8
+	WaitForSingleObjectEx@12
+
+	ReleaseSemaphore@12
+	TlsGetValue@4

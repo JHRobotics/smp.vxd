@@ -41,6 +41,43 @@ void tsc_get(void *counter_qw_ptr)
 	};
 }
 
+/* dst = a - b */
+void tsc_cmp(void *ptr_a, void *ptr_b, void *ptr_dst)
+{
+	_asm
+	{
+		push edi
+		mov ecx, [ptr_a]
+		mov edx, [ptr_b]
+		mov edi, [ptr_dst]
+		mov eax, [ecx]
+		sub eax, [edx]
+		mov [edi], eax
+		mov eax, [ecx+4]
+		sbb eax, [edx+4]
+		mov [edi+4], eax
+		pop edi
+	}
+}
+
+uint32_t tsc_div(void *ptr_a, uint32_t b)
+{
+	uint32_t result = 0;
+	_asm
+	{
+		mov ecx, [ptr_a]
+		mov eax, [ecx]
+		mov edx, [ecx+4]
+		mov ecx, [b]
+		test ecx, ecx
+		jz tsc_div_zero
+			div ecx
+			mov [result], eax
+		tsc_div_zero:
+	}
+	return result;
+}
+
 BOOL tsc_ring(const void *counter_qw_ptr, uint32_t extra_ticks)
 {
 	BOOL result = FALSE;

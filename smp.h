@@ -41,6 +41,8 @@ typedef struct mpfp
 
 #define MPFP_MAGIC "_MP_"
 
+#define XSAVE_SIZE 1536
+
 typedef struct mpct
 {
 	char signature[4]; // "PCMP"
@@ -105,6 +107,7 @@ typedef struct apboot_vars
 	uint32_t stack_addr;
 	uint32_t bsp_id;
 	uint32_t ttable;
+	uint32_t gdata;
 } apboot_vars_t;
 
 typedef struct tdata
@@ -118,14 +121,23 @@ typedef struct tdata
 	uint32_t index;            // 24
 	uint32_t xsaveflags;       // 28
 	uint32_t gdt[32];          // 32
-	uint8_t  init_state[128];  // 160  -> tagCRS_32
-	uint8_t  proc_state[128];  // 288 -> tagCRS_32
+	uint32_t init_state[32];   // 160 -> tagCRS_32
+	uint32_t proc_state[32];   // 288 -> tagCRS_32
 	uint32_t tss[32];          // 416 (size 104)
 	uint32_t stats_usage;      // 544
 	uint32_t last_active[2];   // 548
-	uint8_t pad[20];           // 540
-	uint8_t  fpu_state[1024];  // 576
-} tdata_t;                   // size: 1600
+	uint32_t thread_ptr;       // 556
+	uint8_t  pad[16];          // 560
+	uint8_t  fpu_state[XSAVE_SIZE];  // 576
+} tdata_t;
+
+struct ts_thread;
+
+typedef struct gdata
+{
+	struct ts_thread *bsp_thread;  // 0
+	volatile uint32_t ap_free_cnt; // 4
+} gdata_t;
 
 typedef struct titem
 {
@@ -156,12 +168,13 @@ typedef struct titem
 
 extern titem_t *ttable;
 extern int ttable_max;
+extern gdata_t gdata;
 
 BOOL smp_init();
 BOOL smp_wakeup(int apid);
 
 int __cdecl smp_ap_main(uint32_t apid);
-
+extern uint8_t bspid;
 extern uint8_t *smp_first_mb;
 
 extern uint32_t kernel_flat;
@@ -180,6 +193,6 @@ extern BOOL no_sys_fxsave;
 
 void fpu_save(BOOL sys, uint8_t *dst);
 void fpu_restore(BOOL sys, const uint8_t *src);
-BOOL fpu_need_extra_save();
+BOOL fpu_need_extra_save(BOOL restore);
 
 #endif /* __SMP_H__INCLUDED__ */

@@ -15,8 +15,6 @@
   _endthread = smp9x__endthread
   _endthreadex = smp9x__endthreadex
   GetThreadId@4 = smp9x_GetThreadId
-  TryEnterCriticalSection@4 = TryEnterCriticalSection9x
-  InitializeCriticalSectionAndSpinCount@8 = InitializeCriticalSectionAndSpinCount9x
   memset = fast_memset
   IsProcessorFeaturePresent@4 = smp9x_IsProcessorFeaturePresent
 ; InitOnceExecuteOnce = smp9x_InitOnceExecuteOnce
@@ -26,3 +24,23 @@
 ; WakeConditionVariable = smp9x_WakeConditionVariable
 ; SwitchToThread = smp9x_SwitchToThread
 
+	TryEnterCriticalSection@4 = TryEnterCriticalSection9x
+	InitializeCriticalSectionAndSpinCount@8 = InitializeCriticalSectionAndSpinCount9x
+
+;	InitializeCriticalSection@4 = smp9x_InitializeCriticalSection
+;	TryEnterCriticalSection@4 = smp9x_TryEnterCriticalSection
+;	EnterCriticalSection@4 = smp9x_EnterCriticalSection
+;	LeaveCriticalSection@4 = smp9x_LeaveCriticalSection
+;	InitializeCriticalSectionAndSpinCount@8 = smp9x_InitializeCriticalSectionAndSpinCount
+;	DeleteCriticalSection@4 = smp9x_DeleteCriticalSection
+
+	GetCurrentThreadId@0 = smp9x_GetCurrentThreadId
+	GetCurrentThread@0 = smp9x_GetCurrentThread
+	GetCurrentProcess@0 = smp9x_GetCurrentProcess
+	GetCurrentProcessId@0 = smp9x_GetCurrentProcessId
+
+;	WaitForSingleObject@8 = smp9x_WaitForSingleObject
+;	ReleaseSemaphore@12 = smp9x_ReleaseSemaphore
+	
+;	TlsGetValue@4 = smp9x_TlsGetValue
+;	WaitForMultipleObjects@16 = smp9x_WaitForMultipleObjects

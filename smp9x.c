@@ -32,6 +32,7 @@ typedef void (__cdecl *smp9x_fly_t)(void);
 typedef void (__cdecl *smp9x_land_t)(void);
 typedef void (__cdecl *smp9x_reattach_t)(void);
 typedef unsigned (__cdecl *smp9x_cpuindex_t)(void);
+typedef smp9x_thread_extradata_t *(__cdecl *smp9x_threaddata_t)(void);
 
 typedef DWORD (WINAPI *smp9x_winthread_main_std_t)(LPVOID lpParameter);
 typedef void (__cdecl *smp9x_winthread_main_bt_t)(void *);
@@ -48,13 +49,27 @@ static DWORD smp9x_address = 0;
 static DWORD cpu_count = 0;
 static DWORD cpu_features = 0;
 static HANDLE smp_vxd = INVALID_HANDLE_VALUE;
-//			 DWORD smp9x_address_fly = 0;
-//			 DWORD smp9x_address_land = 0;
 static GetCurrentProcessorNumber_t gcpn = NULL;
 static IsProcessorFeaturePresent_t ipfp = NULL;
 
 static CRITICAL_SECTION cs = {};
-static HANDLE memheap = NULL;
+HANDLE memheap = NULL;
+
+static int dummy_is_bsp(){return 1;}
+static void dummy_fly(){}
+static void dummy_land(){}
+static void dummy_reattach(){}
+static unsigned dummy_cpuindex(){return 0;}
+static smp9x_thread_extradata_t *dummy_threaddata(){return NULL;}
+
+static BOOL is_bsp_fast();
+
+static smp9x_is_bsp_t is_bsp = dummy_is_bsp;
+static smp9x_fly_t fly = dummy_fly;
+static smp9x_land_t land = dummy_land;
+static smp9x_reattach_t reattach = dummy_reattach;
+static smp9x_cpuindex_t cpuindex = dummy_cpuindex;
+static smp9x_threaddata_t threaddata = dummy_threaddata;
 
 typedef struct smp9x_thread
 {
@@ -72,6 +87,7 @@ typedef struct smp9x_thread
 } smp9x_thread_t;
 
 static smp9x_thread_t *threads = NULL;
+static DWORD bspid = 0;
 
 void __cdecl smp9x_init()
 {
@@ -88,7 +104,22 @@ void __cdecl smp9x_init()
 					NULL, 0, &smp9x_address, sizeof(DWORD),
 					NULL, NULL))
 				{
-					smp_usable = TRUE;
+					if(smp9x_address)
+					{
+						smp_usable = TRUE;
+						is_bsp = (smp9x_is_bsp_t)(smp9x_address+SMP_OFFSET_IS_BSP);
+						fly = (smp9x_fly_t)(smp9x_address+SMP_OFFSET_FLY);
+						land = (smp9x_land_t)(smp9x_address+SMP_OFFSET_LAND);
+						threaddata = (smp9x_threaddata_t)(smp9x_address + SMP_OFFSET_THREADDATA);
+						reattach = (smp9x_reattach_t)(smp9x_address + SMP_OFFSET_REATTACH);
+						cpuindex = (smp9x_cpuindex_t)(smp9x_address + SMP_OFFSET_CPUINDEX);
+						if(DeviceIoControl(smp_vxd, DIOC_SMP_CPU_BSPID, NULL, 0, &bspid, sizeof(DWORD), NULL, NULL))
+						{
+							is_bsp = is_bsp_fast;
+						}
+						
+					}
+					
 				} // else{printf("E:address\n");}
 			} // else{printf("E:cpucount 2\n");}
 		} // else{printf("E:cpucount\n");}
@@ -118,6 +149,22 @@ void __cdecl smp9x_init()
 	InitializeCriticalSection(&cs);
 }
 
+static BOOL is_bsp_fast()
+{
+	DWORD cpuid;
+	__asm(
+	    //"rdtscp\n"
+	    //"movl %%ecx, %0\n"
+	    
+	    "movl $1, %%eax\n"
+	    "cpuid\n"
+	    "shrl $24, %%ebx\n"
+	    "movl %%ebx, %0\n"
+	    : "=rm" (cpuid)
+	    : /* no inputs */
+	    : "eax", "ebx", "ecx", "edx");
+	return cpuid == bspid;
+}
 
 void __cdecl smp9x_close()
 {
@@ -131,22 +178,21 @@ void __cdecl smp9x_close()
 
 void __cdecl smp9x_thread_idle_proc(volatile DWORD *lock_ptr)
 {
-	smp9x_reattach_t reattach = (smp9x_reattach_t)(smp9x_address + SMP_OFFSET_REATTACH);
 	for(;;)
 	{
 		if(lock_ptr != NULL)
 		{
-			int def_priority = 0;
-			HANDLE curr = GetCurrentThread();
-			def_priority = GetThreadPriority(curr);
-			SetThreadPriority(curr, THREAD_PRIORITY_LOWEST);
+			//int def_priority = 0;
+			//HANDLE curr = GetCurrentThread();
+			//def_priority = GetThreadPriority(curr);
+			//SetThreadPriority(curr, THREAD_PRIORITY_LOWEST);
 			
 			while(*lock_ptr != 0)
 			{
 				Sleep(0);
 			}
 			
-			SetThreadPriority(curr, def_priority);
+			//SetThreadPriority(curr, def_priority);
 		}
 		reattach();
 	}
@@ -157,7 +203,6 @@ void __cdecl smp9x_thread_elevate(volatile DWORD *lock_ptr, int mode)
 {
 	if(smp9x_address != 0)
 	{
-		smp9x_is_bsp_t is_bsp = (smp9x_is_bsp_t)(smp9x_address+SMP_OFFSET_IS_BSP);
 		if(is_bsp())
 		{
 			DWORD params[3];
@@ -172,20 +217,12 @@ void __cdecl smp9x_thread_elevate(volatile DWORD *lock_ptr, int mode)
 
 void __cdecl smp9x_thread_fly()
 {
-	if(smp9x_address != 0)
-	{
-		smp9x_fly_t fly = (smp9x_fly_t)(smp9x_address + SMP_OFFSET_FLY);
-		fly();
-	}
+	fly();
 }
 
 void __cdecl smp9x_thread_land()
 {
-	if(smp9x_address != 0)
-	{
-		smp9x_land_t land = (smp9x_land_t)(smp9x_address + SMP_OFFSET_LAND);
-		land();
-	}
+	land();
 }
 
 int  __cdecl smp9x_cpus()
@@ -257,7 +294,7 @@ static DWORD WINAPI smp9x_winthread_main(LPVOID lpParameter)
 	DWORD rc = 0;
 	
 	smp9x_thread_elevate(&lock, SMP_MODE_AUTORUN);
-	smp9x_thread_fly();
+	fly();
 	
 	mythread = lpParameter;
 	if(mythread != NULL)
@@ -275,7 +312,7 @@ static DWORD WINAPI smp9x_winthread_main(LPVOID lpParameter)
 				break;
 		}
 	}
-	smp9x_thread_land();
+	land();
 	return rc;
 }
 
@@ -312,7 +349,7 @@ HANDLE WINAPI smp9x_CreateThread(
 
 VOID WINAPI smp9x_ExitThread(DWORD dwExitCode)
 {
-	smp9x_thread_land();
+	land();
 	ExitThread(dwExitCode);
 	/* do not call fly again */
 }
@@ -339,7 +376,6 @@ DWORD WINAPI smp9x_GetCurrentProcessorNumber()
 {
 	if(smp9x_address != 0)
 	{
-		smp9x_cpuindex_t cpuindex = (smp9x_cpuindex_t)(smp9x_address + SMP_OFFSET_CPUINDEX);
 		return cpuindex();
 	}
 	
@@ -363,7 +399,7 @@ BOOL WINAPI smp9x_IsProcessorFeaturePresent(DWORD ProcessorFeature)
 	
 	if(dwMajorVersion == 4 || cpu_features || ipfp == NULL)
 	{
-		BOOL test = IsProcessorFeaturePresentCPUID(ProcessorFeature);    
+		BOOL test = IsProcessorFeaturePresentCPUID(ProcessorFeature);
     if(dwMajorVersion == 4)
     {
     	/* Win95 */
@@ -592,4 +628,127 @@ BOOL __cdecl smp9x_stats(int type, int unit, DWORD *ret)
 		}
 	}
 	return rc;
+}
+
+/* used by EnterCriticalSection */
+void __cdecl smp9x_sleep_bsp()
+{
+	if(is_bsp())
+	{
+		Sleep(0);
+	}
+}
+
+BOOL smp9x_is_ap()
+{
+	return !is_bsp();
+}
+
+HANDLE WINAPI smp9x_GetCurrentThread()
+{
+#if 0
+	smp9x_thread_extradata_t *data = threaddata();
+	if(data)
+	{
+		//BOOL ap = smp9x_is_ap();
+		if(data->thread_handle == 0)
+		{
+			//printf("data ptr: %p (ap: %d)\n", data, ap);
+			data->thread_handle = (DWORD)GetCurrentThread();
+		}
+		return (HANDLE)data->thread_handle;
+	}
+#endif
+	return GetCurrentThread();
+}
+
+DWORD WINAPI smp9x_GetCurrentThreadId()
+{
+#if 0
+	if(!is_bsp())
+	{
+/*		smp9x_thread_extradata_t *data = threaddata();
+		if(data)
+		{
+			if(data->thread_id == 0)
+			{
+				data->thread_id = GetCurrentThreadId();
+			}
+			//return data->thread_id;
+		}*/
+	}
+#endif
+	return GetCurrentThreadId();
+}
+
+HANDLE WINAPI smp9x_GetCurrentProcess()
+{
+#if 0
+	smp9x_thread_extradata_t *data = threaddata();
+	if(data)
+	{
+		if(data->process_handle == 0)
+		{
+			data->process_handle = (DWORD)GetCurrentProcess();
+		}
+		return (HANDLE)data->process_handle;
+	}
+#endif
+	return GetCurrentProcess();
+}
+
+DWORD WINAPI smp9x_GetCurrentProcessId()
+{
+#if 0
+	smp9x_thread_extradata_t *data = threaddata();
+	if(data)
+	{
+		if(data->process_id == 0)
+		{
+			data->process_id = GetCurrentProcessId();
+		}
+		return data->process_id;
+	}
+#endif
+	return GetCurrentProcessId();
+}
+
+DWORD WINAPI smp9x_WaitForSingleObject(HANDLE hHandle, DWORD  dwMilliseconds)
+{
+	//BOOL was_ap = smp9x_is_ap();
+	//if(was_ap) smp9x_thread_land();
+	DWORD result = WaitForSingleObject(hHandle, dwMilliseconds);
+	//if(was_ap) smp9x_thread_fly();
+	
+	return result;
+}
+
+BOOL WINAPI smp9x_ReleaseSemaphore(HANDLE hSemaphore, LONG lReleaseCount, LPLONG lpPreviousCount)
+{
+	BOOL was_ap = !is_bsp();
+	if(was_ap) land();
+	DWORD result = ReleaseSemaphore(hSemaphore, lReleaseCount, lpPreviousCount);
+	if(was_ap) fly();
+		
+	return result;
+}
+
+LPVOID WINAPI smp9x_TlsGetValue(DWORD dwTlsIndex)
+{
+	BOOL was_ap = !is_bsp();
+	if(was_ap) land();
+	LPVOID result = TlsGetValue(dwTlsIndex);
+	if(was_ap) fly();
+		
+	return result;
+}
+
+DWORD WINAPI smp9x_WaitForMultipleObjects(DWORD nCount, const HANDLE *lpHandles, BOOL bWaitAll, DWORD dwMilliseconds)
+{
+	BOOL was_ap = !is_bsp();
+	if(was_ap) land();
+	DWORD result = WaitForMultipleObjects(nCount, lpHandles, bWaitAll, dwMilliseconds);
+	if(was_ap) fly();
+		
+	return result;
 }

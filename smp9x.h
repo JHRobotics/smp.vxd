@@ -27,8 +27,10 @@
 #define DIOC_SMP_ELEVATE 4
 #define DIOC_SMP_CPU_FEATURES 5
 #define DIOC_SMP_CPU_STATS 6
+#define DIOC_SMP_CPU_BSPID 7
 
 #define SMP_OFFSET_IS_BSP     0x200
+#define SMP_OFFSET_THREADDATA 0x240
 #define SMP_OFFSET_CPUINDEX   0x280
 #define SMP_OFFSET_FLY        0x300
 #define SMP_OFFSET_LAND       0x400
@@ -84,6 +86,17 @@ DWORD WINAPI smp9x_GetCurrentProcessorNumber();
 BOOL WINAPI smp9x_IsProcessorFeaturePresent(DWORD ProcessorFeature);
 typedef BOOL (WINAPI *smp9x_IsProcessorFeaturePresent_t)(DWORD ProcessorFeature);
 
+HANDLE WINAPI smp9x_GetCurrentThread();
+DWORD WINAPI smp9x_GetCurrentThreadId();
+
 #endif
+
+typedef struct smp9x_thread_extradata
+{
+	DWORD thread_id;
+	DWORD thread_handle;
+	DWORD process_id;
+	DWORD process_handle;
+} smp9x_thread_extradata_t;
 
 #endif /* __SMPAPI_H__INCLUDED__ */

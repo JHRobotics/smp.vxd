@@ -54,10 +54,12 @@ DDB VXD_DDB = {
 };
 
 DWORD ThisVM = 0;
+uint8_t bspid = 0;
 uint8_t *smp_first_mb = NULL;
 static BOOL smp_valid = FALSE;
 static BOOL smp_init_succ = FALSE;
 static cpuid_result_t cpu_flags;
+static uint32_t tsc_last[2] = {0, 0};
 
 uint32_t xsave_flags = 0;
 BOOL no_sys_fxsave = FALSE;
@@ -79,6 +81,9 @@ void __declspec(naked) timeout_entry();
 void __declspec(naked) monitor_entry();
 
 #define AP_MONITOR_TIMEOUT 125
+
+/* global data */
+gdata_t gdata = {NULL, 0};
 
 void enable_simd()
 {
@@ -106,7 +111,7 @@ void enable_simd()
 				db 0x0F, 0x01, 0xD1 /*xsetbv*/
 				pop edx
 				pop ecx
-			}
+			};
 			
 			/* reread CPUID when AVX is now avaible! */
 			cpuid(1, &cpu_flags);
@@ -237,9 +242,15 @@ void __stdcall Device_Init_proc(DWORD vm, BYTE *command_tail)
 			smp_switch_install();
 			smp_valid = TRUE;
 
-			tracef("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
+			dbg_printf("sizeof(tdata_t) = %d, sizeof(CRS_32) = %d\n",
 				sizeof(tdata_t), sizeof(CRS_32));
-				
+			
+			dbg_printf("bsp_id debug: -  %X\n", *(((DWORD*)(kernel_flat)) + 0x1C0 + 0));
+			dbg_printf("ttable debug: %X %X\n", ttable, *(((DWORD*)(kernel_flat)) + 0x1C0 + 1));
+			dbg_printf("gdata  debug: %X %X\n", &gdata, *(((DWORD*)(kernel_flat)) + 0x1C0 + 2));
+			
+			tsc_get(tsc_last);
+			
 	#ifdef DEBUG
 			Set_Global_Time_Out(1000, NULL, timeout_entry);
 	#endif
@@ -389,7 +400,7 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 	DWORD *inBuf  = (DWORD*)params->lpInBuffer;
 	DWORD *outBuf = (DWORD*)params->lpOutBuffer;
 	
-	dbg_printf("Device IO: %ld\n", params->dwIoControlCode);
+	dbg_printf("Device IO: %ld, free ap: %ld\n", params->dwIoControlCode, gdata.ap_free_cnt);
 
 	switch(params->dwIoControlCode)
 	{
@@ -456,6 +467,10 @@ DWORD __stdcall Device_IO_Control(DWORD vmhandle, struct DIOCParams *params)
 			}
 			break;
 		}
+		case DIOC_SMP_CPU_BSPID:
+			outBuf[0] = bspid;
+			rc = 0;
+			break;
 		// all others
 	}
 	
@@ -483,7 +498,8 @@ void __stdcall Device_Thread_Destroy(DWORD thread_handle)
 				atomic_lock(sp, &s);
 			} while(s == S_BUSY);
 			s = S_DIRCARD;
-			smp_wakeup(cpu);
+			//smp_wakeup(cpu);
+			// ^ no needs now
 			atomic_unlock(sp, s);
 		}
 	}
@@ -576,6 +592,21 @@ void __declspec(naked) VXD_control()
 void __stdcall monitor_proc(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 {
 	int i;
+	/* adjust timer frequency */
+	uint32_t tsc_act[2];
+	uint32_t tsc_diff[2];
+	uint32_t ms_tick;
+	
+	tsc_get(tsc_act);
+	tsc_cmp(tsc_act, tsc_last, tsc_diff);
+	ms_tick = tsc_div(tsc_diff, AP_MONITOR_TIMEOUT + tardiness);
+	memcpy(tsc_last, tsc_act, sizeof(uint32_t[2]));
+	//dbg_printf("tm = %d\n", ms_tick);
+	
+	tsc_ms_clock = ms_tick;
+	tsc_us_clock = ms_tick/1000;
+	
+	/* calculate CPU usage */
 	for(i = 0; i <= ttable_max; i++)
 	{
 		if(ttable[i].data != NULL)
@@ -589,6 +620,8 @@ void __stdcall monitor_proc(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 cr
 			}
 		}
 	}
+
+	/* restart timer */
 	Set_Global_Time_Out(AP_MONITOR_TIMEOUT, NULL, monitor_entry);
 }
 
@@ -617,7 +650,7 @@ void __stdcall timeout(DWORD vm, DWORD tardiness, DWORD refdata, PCRS_32 crs)
 			tracef("CPU#%d = %d (%X) ", i, ttable[i].data->status,  ttable[i].data->stats_usage);
 		}
 	};
-	tracef("\n");
+	tracef(" free=%d\n", gdata.ap_free_cnt);
 	
 	for(i = 0; i <= ttable_max; i++)
 	{

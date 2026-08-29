@@ -143,7 +143,6 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 {
 	int i, j;
 	apboot_vars_t *vars = (apboot_vars_t*)(smp_first_mb+AP_BOOT_ADDR+AP_BOOT_VAR_OFF);
-	uint8_t bspid = 0;
 	DWORD msr_lo = 0;
 	DWORD msr_hi = 0;
 
@@ -219,6 +218,7 @@ BOOL smp_init_bsp(titem_t *ttable, void *kernel, DWORD lapic)
 		vars->stack_addr  = ttable[i].stack + STACK_OFF_KERNEL;
 		vars->bsp_id      = bspid;
 		vars->ttable      = (uint32_t)ttable;
+		vars->gdata       = (uint32_t)(&gdata);
 		
 		//memcpy((void*)(AP_BOOT_ADDR), smp_first_mb+AP_BOOT_ADDR, apboot_len);
 
@@ -461,6 +461,8 @@ BOOL smp_init()
 	if(ap_count > 0)
 	{
 		cpu_count = ap_count + 1;
+		gdata.ap_free_cnt = ap_count;
+		
 		dbg_printf("AP %u x, going to init bsp\n", ap_count);
 		return smp_init_bsp(ttable, kernel, lapic);
 	}

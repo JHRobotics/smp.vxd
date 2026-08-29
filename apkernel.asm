@@ -21,7 +21,7 @@
 ; ******************************************************************************
 ;
 ;
-;                             JH APC/S 2026.0
+;                             JH APC/S 2026.1
 ;                                 kernel
 ;
 ;
@@ -69,7 +69,16 @@ tdata_gdt        equ 32
 tdata_init_state equ 160
 tdata_proc_state equ 288
 tdata_proc_tss   equ 416
+tdata_thread_ptr equ 556
 tdata_fpu_state  equ 576
+
+; gdata
+gdata_bsp_thread  equ 0
+gdata_ap_free_cnt equ 4
+
+; ts_thread
+ts_thread_idle_proc equ 16
+ts_thread_data    equ 28
 
 ; AP state
 S_BUSY    equ 0
@@ -137,13 +146,13 @@ use32
 org org_boot_addr
 _kernel_boot:
 	jmp skip_header
-	rb 14
-	db "JH APC/S 2026.0 "
+	db "JH APC/S2026.1"
 	skip_header:
 	mov ebp, ecx
 	add ebp, ap_data-_kernel_boot    ; epb -> ap_data
 	mov [ebp+(bsp_id-ap_data)], esi  ; save bsp_id
 	mov [ebp+(ttable-ap_data)], edi  ; save ttable ptr
+	mov [ebp+(gdata-ap_data)],  edx  ; save gdata ptr
 
 	push ecx
 	GetAPID
@@ -230,47 +239,32 @@ _switchtask:
 	add esi, tdata_proc_state ; proc_state
 	
 	; restore iret stack
-	mov   eax, user_ds
-	push  eax
-	mov   eax, [esi+Client_ESP]
-	push  eax
+	push  dword user_ds
+	push  dword [esi+Client_ESP]
 
 	mov   eax, [esi+Client_EFlags]
 	or    eax, eflags_set
 	and   eax, not eflags_clr
 	push  eax ; iret eflags
 	
-	mov   eax, user_cs ; user code segment
-	;mov   eax, sys_cs
-	push  eax ; iret cs
-	
-	mov   eax, [esi+Client_EIP]
-	push  eax ; iret eip
+	push  dword user_cs ; iret cs
+	push  dword [esi+Client_EIP] ; iret eip
 	
 	; restore general registry (popad)
-	mov   eax, [esi+Client_EAX]
-	push 	eax
-	mov   eax, [esi+Client_ECX]
-	push 	eax
-	mov   eax, [esi+Client_EDX]
-	push 	eax
-	mov   eax, [esi+Client_EBX]
-	push 	eax
-	mov   eax, [esi+Client_ESP] ; but ignored by popad
-	push 	eax
-	mov   eax, [esi+Client_EBP]
-	push 	eax
-	mov   eax, [esi+Client_ESI]
-	push 	eax
-	mov   eax, [esi+Client_EDI]
-	push 	eax
+	push  dword [esi+Client_EAX]
+	push  dword [esi+Client_ECX]
+	push  dword [esi+Client_EDX]
+	push  dword [esi+Client_EBX]
+	push  dword [esi+Client_ESP] ; but ignored by popad
+	push  dword [esi+Client_EBP]
+	push  dword [esi+Client_ESI]
+	push  dword [esi+Client_EDI]
 	
 	; restore FPU/MMX/SSE state
-	mov eax, esi
-	sub eax, tdata_proc_state-tdata_xsaveflags ; xsaveflags
-	mov eax, [eax]
-	add   esi, tdata_fpu_state-tdata_proc_state ; fpu_state
-	test eax,eax
+	sub   esi, tdata_proc_state
+	mov   eax, [esi + tdata_xsaveflags]  ; xsaveflags
+	add   esi, tdata_fpu_state ; fpu_state
+	test eax, eax
 	jz use_fxrstor
 		xor edx,edx
 		xrstor [esi]
@@ -290,7 +284,7 @@ _switchtask:
 	mov fs, ax
 	
 	; switch to context
-	popad	
+	popad
 	iret
 	
 ;	add esp, 5*4
@@ -356,29 +350,18 @@ switch_back:
 	lea  esi, [ebx+tdata_init_state]
 	mov  esp, [esi+Client_ESP]
 	; iret stack
-	mov  eax, [esi+Client_EFlags]
-	push eax
-	mov  eax, sys_cs
-	push eax
-	mov  eax, [esi+Client_EIP]
-	push eax
+	push dword [esi+Client_EFlags]
+	push dword sys_cs
+	push dword [esi+Client_EIP]
 	; restore general registers
-	mov  eax, [esi+Client_EAX]
-	push eax
-	mov  eax, [esi+Client_ECX]
-	push eax
-	mov  eax, [esi+Client_EDX]
-	push eax
-	mov  eax, [esi+Client_EBX]
-	push eax
-	sub  esp, 4
-	mov  eax, [esi+Client_EBP]
-	push eax
-	mov  eax, [esi+Client_ESI]
-	push eax
-	mov  eax, [esi+Client_EDI]
-	push eax
-	
+	push dword [esi+Client_EAX]
+	push dword [esi+Client_ECX]
+	push dword [esi+Client_EDX]
+	push dword [esi+Client_EBX]
+	push dword [esi+Client_ESP]
+	push dword [esi+Client_EBP]
+	push dword [esi+Client_ESI]
+	push dword [esi+Client_EDI]
 	;
 	; segments
 	;
@@ -410,11 +393,9 @@ switch_back:
 ;
 org org_is_bsp
 _is_bsp:
-	GetData eax
 	push esi
 	push ebx
-	mov esi, eax
-	
+	GetData esi
 	GetAPID
 	mov    edx, ebx
 	xor    eax, eax
@@ -428,7 +409,39 @@ _is_bsp:
 	ret
 	
 	;;; PAD
-	rb (fn_block_size shr 1) - $ + _is_bsp
+	rb (fn_block_size shr 2) - $ + _is_bsp
+
+;
+; void *__cdecl thread_data()
+;
+; @return: ts->data or NULL
+;
+_thread_data:
+	push ebx
+	GetAPID
+	GetData ecx
+	cmp    ebx, [ecx+(bsp_id-ap_data)]
+	jnz    get_thread_data
+		mov eax, [ecx+(gdata-ap_data)]
+		mov eax, [eax+gdata_bsp_thread]
+		jmp thread_data_done
+
+	get_thread_data:
+	shl ebx,  3 ; ebx * 8
+	mov ecx, [ecx+(ttable-ap_data)]
+	add ecx,  ebx      ; table[apid]
+	mov ebx, [ecx+4]   ; table[apid]->data
+	mov eax, [ebx+tdata_thread_ptr]
+	
+	thread_data_done:
+	pop ebx
+	test eax, eax
+	jz thread_data_ret
+		mov eax, [eax+ts_thread_data] ; ts_thread->data
+	
+	thread_data_ret:
+	ret
+	rb (fn_block_size shr 2) - $ + _thread_data
 
 ;
 ; int __cdecl cpuindex()
@@ -469,6 +482,18 @@ _fly:
 	call _is_bsp
 	test eax, eax
 	jz skip_fly
+	  ; check if thread has idle proc
+		GetData edx
+		mov edx, [edx+(gdata-ap_data)]  ; EDX = gdata ptr
+		mov ecx, [edx+gdata_bsp_thread] ; ECX = ts_thread
+		test ecx, ecx
+			jz skip_fly ; this is alien (kernel) thread
+		mov ecx, [ecx+ts_thread_idle_proc]
+		test ecx, ecx
+			jz skip_fly ; this is alien (crt, gui...) thread
+		mov ecx, [edx+gdata_ap_free_cnt]
+		test ecx, ecx ; there is free AP
+			jz skip_fly
 		pop edx
 		pop ecx
 		pop eax
@@ -484,7 +509,7 @@ _fly:
 
 ; init xsave if needed
 ; edi -> tdata
-; free tu use: eax, edx
+; free to use: eax, edx
 ;
 init_xsave:
 	mov edx, [esi+tdata_cpu_cr4]
@@ -623,6 +648,7 @@ org org_data
 ap_data:
 	bsp_id: dd 0xDDDDDDDD
 	ttable: dd 0xEEEEEEEE
+	gdata:  dd 0xFFFFFFFF
 
 	;;; PAD
 	rb fn_block_size - $ + ap_data
@@ -646,7 +672,7 @@ IDTEntry _dummy_isr, int_gate
 IDTEntry _int3_isr, sw_gate
 
 ; 0x04 	4 	#OF 	Trap 	No 	Overflow 	INTO instruction.
-IDTEntry _error_isr, trap_gate
+IDTEntry _error_isr, int_gate
 ; 0x05 	5 	#BR 	Fault 	No 	BOUND Range Exceeded 	BOUND instruction.
 IDTEntry _error_isr, int_gate
 ; 0x06 	6 	#UD 	Fault 	No 	Invalid Opcode (Undefined Opcode) 	UD instruction or reserved opcode.

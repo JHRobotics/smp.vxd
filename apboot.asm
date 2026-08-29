@@ -21,7 +21,7 @@
 ; ******************************************************************************
 ;
 ;
-;                             JH APC/S 2026.0
+;                             JH APC/S 2026.1
 ;                                bootloader
 ;
 ;
@@ -51,6 +51,7 @@ ap_boot16:
 	mov    esp, [sys_stack]
 	mov    esi, [bsp_id]
 	mov    edi, [ttable]
+	mov    edx, [gdata]
 	mov    cr3, eax
 	mov    eax, cr0
 	; enable PE (but not PG yet)
@@ -127,18 +128,19 @@ sys_start: dd 0xAAAAAAAA        ; kernel position (linear address, PG=1)
 sys_stack: dd 0xDDDDDDDD        ; stack top for kernel
 bsp_id:    dd 0x1D1D1D1D        ; ID of BSP (usually: 0) 
 ttable:    dd 0xEEEEEEEE        ; pointer to ttable (AP individual data: ttable[APID])
+gdata:     dd 0xDADADADA        ; pointer to gdata
 
 ; temporary GDT (PG=0)
 GDT_table_TMP:
 	dd 0, 0
-	dd 0x0000FFFF, 0x00CF9A00    ; flat code
-	dd 0x0000FFFF, 0x00CF9200    ; flat data
-	dd 0x00000067, 0x00CF8900    ; tss
+	dd 0x0000FFFF, 0x00CF9A00     ; flat code
+	dd 0x0000FFFF, 0x00CF9200     ; flat data
+	dd 0x00000067, 0x00CF8900     ; tss
 GDT_value_TMP:
   dw GDT_value_TMP - GDT_table_TMP - 1
 	dd GDT_table_TMP
 	dd 0, 0
 
 	; pad
-  rb 0x7C - $ + ap_vars
+  rb 0x78 - $ + ap_vars
   dd 0xFFFFFFFF

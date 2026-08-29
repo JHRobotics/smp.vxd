@@ -715,6 +715,15 @@ DWORD GetCR0()
 	return val;
 }
 
+void SetCR0(DWORD new_cr0)
+{
+	_asm
+	{
+		mov eax, [new_cr0]
+		mov cr0, eax
+	}
+}
+
 DWORD GetCR3()
 {
 	DWORD val = 0;
@@ -873,7 +882,7 @@ int Get_Profile_Decimal_Int(const char *profile, const char *keyname, int defaul
 		mov eax, [default_value]
 		mov esi, [profile]
 		mov edi, [keyname]
-	}
+	};
 	VMMCall(Get_Profile_Decimal_Int);
 	_asm
 	{
@@ -883,7 +892,36 @@ int Get_Profile_Decimal_Int(const char *profile, const char *keyname, int defaul
 		dec_not_found:
 		pop edi
 		pop esi
-	}
+	};
 	
 	return result;
 }
+
+void Save_Client_State(void *crs)
+{
+	_asm
+	{
+		push edi
+		mov edi, [crs]
+	};
+	VMMCall(Save_Client_State);
+	_asm
+	{
+		pop edi
+	};
+}
+
+void Restore_Client_State(void *crs)
+{
+	_asm
+	{
+		push esi
+		mov esi, [crs]
+	};
+	VMMCall(Restore_Client_State)
+	_asm
+	{
+		pop esi
+	};
+}
+
